@@ -1,0 +1,59 @@
+{
+  "vision": {
+    "title": "Control9 Pipeline Integrations",
+    "mission": "Make Control9 installable in customer CI/CD systems with a small, trustworthy GitHub Action and GitLab CI component that govern infrastructure changes without becoming the customer's execution platform.",
+    "core_purpose": "This repo owns the pipeline edge: collecting CDK/CloudFormation and Terraform/OpenTofu context, redacting sensitive data, building signed action envelopes, calling the Control9 policy API, posting results back to workflows, and verifying deploy-time fingerprints before production authority is used.",
+    "key_architecture": "A public integration surface for GitHub Actions and GitLab CI/CD. The components run in client repositories and CI/CD runners, classify commands and IaC artifacts, create stable action envelopes, submit summaries to the Control9 control plane, receive allow, deny, approval-required, or observe decisions, and update checks, comments, or jobs accordingly.",
+    "long_term_vision": {
+      "strategic_goals": {
+        "short_term": "Ship the GitHub shadow-mode path: repo config, Terraform plan parser, CDK synth/diff parser, signed envelope submission, observe-only response handling, redaction defaults, and PR check summary without changing the deploy path.",
+        "medium_term": "Add enforce-mode integrations: approval waits, deploy-step verification, protected environment support, GitLab CI component/templates, merge request comments, monorepo support, and richer environment and artifact identity.",
+        "long_term": "Support enterprise estates with mixed GitHub/GitLab usage, customer-hosted or SaaS endpoints, optional customer-owned evidence storage, and integration patterns that remain easy to audit and install."
+      }
+    },
+    "key_principles": [
+      {
+        "priority": 1,
+        "text": "Stay small at the customer edge. The integration should send signed, redacted envelopes and summaries to Control9, not become a local policy engine with hidden product logic."
+      },
+      {
+        "priority": 2,
+        "text": "Default to shadow mode for first installation so customers can see risk output without blocking deploys."
+      },
+      {
+        "priority": 3,
+        "text": "Protect secrets before data leaves the client boundary. Redact raw tokens, private keys, environment values, and sensitive command output by default."
+      },
+      {
+        "priority": 4,
+        "text": "Deploy verification is a first-class path: the plan, template, or artifact fingerprint approved by Control9 must match what the deploy step is about to use."
+      },
+      {
+        "priority": 5,
+        "text": "The integration reports decisions where developers already work: GitHub checks, PR comments, GitLab job status, and merge request comments."
+      }
+    ],
+    "market_strategy": {
+      "competitive_advantages": [
+        {
+          "priority": 1,
+          "text": "A public, reviewable install surface lowers trust friction for customers who need to place Control9 inside production delivery pipelines."
+        },
+        {
+          "priority": 2,
+          "text": "Native GitHub and GitLab support lets Control9 govern approved paths without asking teams to abandon their CI/CD provider."
+        }
+      ],
+      "differentiation_from_competitors": [
+        {
+          "priority": 1,
+          "text": "Unlike remote IaC execution platforms, these integrations leave plan, synth, diff, and deploy work in the customer's pipeline."
+        },
+        {
+          "priority": 2,
+          "text": "Unlike plain CI approvals, the integration ties the decision to a signed envelope and artifact fingerprint that the SaaS can record and verify."
+        }
+      ]
+    }
+  }
+}

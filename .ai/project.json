@@ -1,0 +1,9 @@
+{
+  "name": "control9-integrations",
+  "description": "Public install surface for Control9: GitHub Action and GitLab CI component/template that run in customer pipelines, classify CDK/Terraform/OpenTofu changes, redact and sign action envelopes, request policy decisions, and post workflow, PR, or merge request results.",
+  "type": "opensource",
+  "metadata_path": ".ai",
+  "code_path": ".",
+  "github_url": "https://github.com/alto9/control9-integrations",
+  "github_board": "https://github.com/orgs/alto9/projects/9"
+}
