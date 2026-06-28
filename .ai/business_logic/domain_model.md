@@ -6,10 +6,9 @@ This doc names the core concepts and ownership boundaries for the domain.
 
 - The integration is a customer-edge enforcement and reporting point, not the durable system of record.
 - It gathers supported IaC and deploy context, redacts locally, signs an envelope, requests a SaaS decision, and renders the result where developers already work.
+- GitHub Action command handling groups work into plan, synth, diff, deploy verification, and shell deploy classification. The first shipped action supports Terraform/OpenTofu plan JSON and CDK/CloudFormation synth or diff artifacts as first-class envelope inputs.
+- The integration does not execute policy packs locally. It normalizes customer-edge evidence into an action envelope and asks the Control9 control plane for a decision.
 
 ## Open implementation decisions
 
 Implementation-level items not yet fully specified. `/refine-issue` resolves these into timeless contract prose and removes or collapses bullets when done.
-
-### Control9 project plan
-- Define command categories recognized for plan, synth, diff, deploy verification, and shell deploy classification.
