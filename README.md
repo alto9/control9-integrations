@@ -75,6 +75,73 @@ Customer repositories should be able to configure:
 - Add deploy verification against approved fingerprints.
 - Add GitLab CI support after the GitHub path proves demand.
 
+## GitHub Action (Shadow Mode)
+
+The first shipped action validates IaC artifacts locally, fingerprints them, and writes a summary file without blocking deploys. Envelope signing and policy submission arrive in later milestones.
+
+```yaml
+name: Control9 shadow assessment
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+
+jobs:
+  control9-shadow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform plan
+        working-directory: infra
+        run: |
+          terraform init -backend=false
+          terraform plan -out=tfplan
+          terraform show -json tfplan > plan.json
+
+      - name: Control9 shadow assessment
+        uses: alto9/control9-integrations@v0
+        with:
+          mode: shadow
+          control9-api-url: ${{ vars.CONTROL9_API_URL }}
+          tenant-id: ${{ vars.CONTROL9_TENANT_ID }}
+          signing-secret: ${{ secrets.CONTROL9_SIGNING_SECRET }}
+          target-environment: staging
+          requested-authority: plan
+          iac-tool: terraform
+          command: plan
+          artifact-paths: infra/plan.json
+          working-directory: .
+```
+
+Shadow mode keeps the workflow non-blocking while Control9 records what would have happened. Replace `@v0` with a pinned release tag when you adopt the action in production repositories.
+
+## Local Development
+
+Prerequisites:
+
+- Node.js 20 or newer
+- npm on PATH
+
+Commands:
+
+```bash
+npm install
+npm test
+npm run lint
+npm run build
+```
+
+The build bundles `src/index.ts` into `dist/index.js`, which `action.yml` references for GitHub Actions execution.
+
+Fixture directories under `fixtures/` support upcoming parser, envelope schema, and redaction work:
+
+- `fixtures/terraform/` and `fixtures/opentofu/` for plan JSON
+- `fixtures/cdk/` and `fixtures/cloudformation/` for synthesized templates
+- `fixtures/envelope/` for canonical envelope examples
+- `fixtures/redaction/` for redaction regression cases
+
 ## Related Repositories
 
 - `control9`: SaaS control plane, policy API, approval workflow, evidence timeline, billing, and admin UI.

@@ -1,0 +1,36 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.7.0",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "random_pet.example",
+          "mode": "managed",
+          "type": "random_pet",
+          "name": "example",
+          "provider_name": "registry.terraform.io/hashicorp/random",
+          "values": {
+            "length": 2
+          }
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "random_pet.example",
+      "mode": "managed",
+      "type": "random_pet",
+      "name": "example",
+      "provider_name": "registry.terraform.io/hashicorp/random",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "length": 2
+        }
+      }
+    }
+  ]
+}
