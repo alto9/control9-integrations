@@ -1,0 +1,10 @@
+{
+  "decisionId": "dec-allow-1",
+  "decisionKind": "allow",
+  "reason": "Change is within approved policy bounds.",
+  "riskSummary": "No elevated risk identified.",
+  "policyVersion": "2026.06.1",
+  "artifactFingerprint": "fp-allow-001",
+  "targetEnvironment": "staging",
+  "runtimeMode": "shadow"
+}

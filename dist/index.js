@@ -32825,6 +32825,326 @@ function validateActionEnvelopeSchema(envelope) {
 
 /***/ }),
 
+/***/ 1685:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitHubApiError = exports.CONTROL9_COMMENT_MARKER_PREFIX = void 0;
+exports.buildCommentMarker = buildCommentMarker;
+exports.buildPrCommentBody = buildPrCommentBody;
+exports.readPrCommentContextFromEnv = readPrCommentContextFromEnv;
+exports.createFetchGitHubCommentsClient = createFetchGitHubCommentsClient;
+exports.publishPrComment = publishPrComment;
+const node_fs_1 = __nccwpck_require__(3024);
+const core = __importStar(__nccwpck_require__(7484));
+const workflow_summary_1 = __nccwpck_require__(3151);
+exports.CONTROL9_COMMENT_MARKER_PREFIX = "control9-pr-feedback";
+function readEnv(name) {
+    return process.env[name]?.trim() ?? "";
+}
+function isPullRequestEvent(eventName) {
+    return eventName === "pull_request" || eventName === "pull_request_target";
+}
+function readPullRequestNumberFromEvent(eventPath) {
+    try {
+        const payload = JSON.parse((0, node_fs_1.readFileSync)(eventPath, "utf8"));
+        const number = payload.pull_request?.number;
+        if (typeof number === "number" && Number.isFinite(number) && number > 0) {
+            return number;
+        }
+    }
+    catch {
+        return undefined;
+    }
+    return undefined;
+}
+function buildCommentMarker(context) {
+    return `<!-- ${exports.CONTROL9_COMMENT_MARKER_PREFIX}:workflow=${context.workflow}:job=${context.job} -->`;
+}
+function buildPrCommentBody(rendered, marker) {
+    return `${marker}\n\n${(0, workflow_summary_1.buildWorkflowSummarySection)(rendered)}`;
+}
+function readPrCommentContextFromEnv() {
+    const eventName = readEnv("GITHUB_EVENT_NAME");
+    if (!isPullRequestEvent(eventName)) {
+        return undefined;
+    }
+    const eventPath = readEnv("GITHUB_EVENT_PATH");
+    const pullRequestNumber = eventPath ? readPullRequestNumberFromEvent(eventPath) : undefined;
+    if (!pullRequestNumber) {
+        return undefined;
+    }
+    const token = readEnv("GITHUB_TOKEN");
+    if (!token) {
+        return undefined;
+    }
+    const repository = readEnv("GITHUB_REPOSITORY");
+    const [owner, repo] = repository.split("/");
+    if (!owner || !repo) {
+        return undefined;
+    }
+    return {
+        apiUrl: readEnv("GITHUB_API_URL") || "https://api.github.com",
+        token,
+        owner,
+        repo,
+        pullRequestNumber,
+        workflow: readEnv("GITHUB_WORKFLOW") || "workflow",
+        job: readEnv("GITHUB_JOB") || "job",
+        eventName,
+    };
+}
+function isPermissionError(error) {
+    return error instanceof GitHubApiError && isPermissionErrorStatus(error.status);
+}
+function isPermissionErrorStatus(status) {
+    return status === 401 || status === 403;
+}
+class GitHubApiError extends Error {
+    status;
+    constructor(status, message) {
+        super(message);
+        this.status = status;
+        this.name = "GitHubApiError";
+    }
+}
+exports.GitHubApiError = GitHubApiError;
+function createFetchGitHubCommentsClient(apiUrl, token) {
+    const baseUrl = apiUrl.replace(/\/$/, "");
+    async function request(method, path, body) {
+        const response = await fetch(`${baseUrl}${path}`, {
+            method,
+            headers: {
+                Accept: "application/vnd.github+json",
+                Authorization: `Bearer ${token}`,
+                "X-GitHub-Api-Version": "2022-11-28",
+                ...(body ? { "Content-Type": "application/json" } : {}),
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        if (!response.ok) {
+            throw new GitHubApiError(response.status, `GitHub API ${method} ${path} failed`);
+        }
+        return (await response.json());
+    }
+    return {
+        async listIssueComments(owner, repo, issueNumber) {
+            return request("GET", `/repos/${owner}/${repo}/issues/${issueNumber}/comments`);
+        },
+        async createIssueComment(owner, repo, issueNumber, commentBody) {
+            return request("POST", `/repos/${owner}/${repo}/issues/${issueNumber}/comments`, { body: commentBody });
+        },
+        async updateIssueComment(owner, repo, commentId, commentBody) {
+            return request("PATCH", `/repos/${owner}/${repo}/issues/comments/${commentId}`, { body: commentBody });
+        },
+    };
+}
+function findExistingComment(comments, marker) {
+    return comments.find((comment) => comment.body.includes(marker));
+}
+async function publishPrComment(input, deps = {}) {
+    const resolved = {
+        readContext: readPrCommentContextFromEnv,
+        warning: (message) => {
+            core.warning(message);
+        },
+        client: createFetchGitHubCommentsClient(readEnv("GITHUB_API_URL") || "https://api.github.com", readEnv("GITHUB_TOKEN")),
+        ...deps,
+    };
+    const context = resolved.readContext();
+    if (!context) {
+        const eventName = readEnv("GITHUB_EVENT_NAME");
+        if (!isPullRequestEvent(eventName)) {
+            return { state: "skipped-no-pr" };
+        }
+        if (!readEnv("GITHUB_TOKEN")) {
+            return { state: "skipped-no-token" };
+        }
+        return { state: "skipped-no-pr" };
+    }
+    const marker = buildCommentMarker(context);
+    const body = buildPrCommentBody(input.rendered, marker);
+    try {
+        const comments = await resolved.client.listIssueComments(context.owner, context.repo, context.pullRequestNumber);
+        const existing = findExistingComment(comments, marker);
+        if (existing) {
+            const updated = await resolved.client.updateIssueComment(context.owner, context.repo, existing.id, body);
+            return { state: "updated", commentId: updated.id };
+        }
+        const created = await resolved.client.createIssueComment(context.owner, context.repo, context.pullRequestNumber, body);
+        return { state: "created", commentId: created.id };
+    }
+    catch (error) {
+        if (isPermissionError(error)) {
+            resolved.warning("Control9 skipped pull request comment: insufficient GitHub token permissions.");
+            return { state: "skipped-permission" };
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        resolved.warning(`Control9 pull request comment failed; workflow summary and logs remain available. ${message}`);
+        return { state: "failed-fallback" };
+    }
+}
+
+
+/***/ }),
+
+/***/ 3151:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SUMMARY_SECTION_HEADING = exports.SUMMARY_ENV_VAR = void 0;
+exports.buildWorkflowSummarySection = buildWorkflowSummarySection;
+exports.buildLogFallbackLines = buildLogFallbackLines;
+exports.emitDecisionAnnotation = emitDecisionAnnotation;
+exports.appendWorkflowSummary = appendWorkflowSummary;
+exports.publishWorkflowFeedback = publishWorkflowFeedback;
+const promises_1 = __nccwpck_require__(1455);
+const core = __importStar(__nccwpck_require__(7484));
+const pr_comment_1 = __nccwpck_require__(1685);
+exports.SUMMARY_ENV_VAR = "GITHUB_STEP_SUMMARY";
+exports.SUMMARY_SECTION_HEADING = "Control9 Policy Decision";
+function buildWorkflowSummarySection(rendered) {
+    return [`## ${exports.SUMMARY_SECTION_HEADING}`, "", rendered.bodyMarkdown].join("\n");
+}
+function buildLogFallbackLines(rendered) {
+    return [
+        `## ${exports.SUMMARY_SECTION_HEADING}`,
+        rendered.label,
+        rendered.summary,
+        ...rendered.detailLines.map((line) => `- ${line}`),
+    ];
+}
+function emitDecisionAnnotation(rendered, deps) {
+    const properties = { title: rendered.label };
+    if (rendered.blocksWorkflow) {
+        deps.warning(rendered.annotationMessage, properties);
+        return;
+    }
+    deps.notice(rendered.annotationMessage, properties);
+}
+async function appendWorkflowSummary(markdown) {
+    const summaryPath = process.env[exports.SUMMARY_ENV_VAR]?.trim();
+    if (!summaryPath) {
+        return false;
+    }
+    try {
+        await (0, promises_1.appendFile)(summaryPath, `${markdown}\n`, "utf8");
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+function defaultDependencies() {
+    return {
+        appendSummary: appendWorkflowSummary,
+        notice: (message, properties) => {
+            core.notice(message, properties);
+        },
+        warning: (message, properties) => {
+            core.warning(message, properties);
+        },
+        info: (message) => {
+            core.info(message);
+        },
+    };
+}
+async function publishWorkflowFeedback(input, deps = {}) {
+    const resolved = { ...defaultDependencies(), ...deps };
+    const sectionMarkdown = buildWorkflowSummarySection(input.rendered);
+    emitDecisionAnnotation(input.rendered, resolved);
+    const summaryWritten = await resolved.appendSummary(sectionMarkdown);
+    let usedLogFallback = false;
+    if (!summaryWritten) {
+        usedLogFallback = true;
+        for (const line of buildLogFallbackLines(input.rendered)) {
+            resolved.info(line);
+        }
+        if (input.summaryPath) {
+            resolved.info(`Local summary JSON: ${input.summaryPath}`);
+        }
+    }
+    const prComment = await (0, pr_comment_1.publishPrComment)({ rendered: input.rendered });
+    return {
+        summaryWritten,
+        prCommentState: prComment.state,
+        usedLogFallback,
+    };
+}
+
+
+/***/ }),
+
 /***/ 9407:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -32867,9 +33187,11 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.runAction = runAction;
 const core = __importStar(__nccwpck_require__(7484));
 const build_1 = __nccwpck_require__(1252);
+const workflow_summary_1 = __nccwpck_require__(3151);
 const inputs_1 = __nccwpck_require__(8422);
 const outputs_1 = __nccwpck_require__(7729);
 const client_1 = __nccwpck_require__(867);
+const decision_renderer_1 = __nccwpck_require__(1206);
 const routing_1 = __nccwpck_require__(6357);
 const types_1 = __nccwpck_require__(8522);
 async function runAction() {
@@ -32882,14 +33204,31 @@ async function runAction() {
     const summary = (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, decision);
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
     const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, decision);
+    const rendered = (0, decision_renderer_1.renderDecisionFeedback)({
+        kind: "policy_decision",
+        decision,
+        artifactFingerprint,
+        targetEnvironment: inputs.targetEnvironment,
+        redactionReport: envelope.redactionReport,
+        runtimeMode: inputs.mode,
+    });
+    const feedback = await (0, workflow_summary_1.publishWorkflowFeedback)({
+        rendered,
+        summaryPath,
+    });
     core.setOutput("envelope-id", result.envelopeId);
     core.setOutput("artifact-fingerprint", result.artifactFingerprint);
     core.setOutput("decision-id", result.decisionId);
     core.setOutput("decision-kind", result.decisionKind);
     core.setOutput("summary-path", result.summaryPath);
+    core.setOutput("summary-written", String(feedback.summaryWritten));
+    core.setOutput("pr-comment-state", feedback.prCommentState);
     core.info(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${result.envelopeId} in ${inputs.mode} mode.`);
     core.info(`Decision ${result.decisionKind}: ${summary.decisionReason}`);
     core.info(`Summary written to ${summaryPath}.`);
+    if (rendered.blocksWorkflow) {
+        throw new types_1.Control9ActionError(rendered.summary);
+    }
 }
 async function main() {
     try {
@@ -33409,6 +33748,350 @@ function normalizePolicyDecision(response) {
         policyVersion,
         followUp,
     };
+}
+
+
+/***/ }),
+
+/***/ 1206:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.renderDecisionFeedback = renderDecisionFeedback;
+const templates_1 = __nccwpck_require__(6019);
+function resolveBlockingBehavior(outcomeKind, runtimeMode) {
+    if (outcomeKind === "observe") {
+        return { isAdvisory: true, blocksWorkflow: false };
+    }
+    if (outcomeKind === "allow") {
+        return { isAdvisory: false, blocksWorkflow: false };
+    }
+    if (runtimeMode === "shadow") {
+        return { isAdvisory: outcomeKind === "require_approval", blocksWorkflow: false };
+    }
+    if (outcomeKind === "deny" || outcomeKind === "fingerprint_mismatch") {
+        return { isAdvisory: false, blocksWorkflow: true };
+    }
+    if (outcomeKind === "require_approval") {
+        return { isAdvisory: false, blocksWorkflow: true };
+    }
+    return { isAdvisory: false, blocksWorkflow: false };
+}
+function renderDecisionFeedback(input) {
+    switch (input.kind) {
+        case "policy_decision":
+            return renderPolicyDecision(input);
+        case "timeout":
+            return renderTimeout(input);
+        case "unavailable_api":
+            return renderUnavailableApi(input);
+        case "redaction_applied":
+            return renderRedactionApplied(input);
+        case "fingerprint_mismatch":
+            return renderFingerprintMismatch(input);
+    }
+}
+function renderPolicyDecision(input) {
+    const outcomeKind = input.decision.decisionKind;
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildPolicyDecisionSummary)(outcomeKind, input.decision, input.runtimeMode);
+    const detailLines = (0, templates_1.buildPolicyDetailLines)({
+        decision: input.decision,
+        artifactFingerprint: input.artifactFingerprint,
+        targetEnvironment: input.targetEnvironment,
+        redactionReport: input.redactionReport,
+    });
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        ...behavior,
+        metadata: {
+            decisionId: input.decision.decisionId,
+            policyVersion: input.decision.policyVersion,
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
+            redactionStatus: (0, templates_1.formatRedactionStatus)(input.redactionReport),
+            followUpAction: (0, templates_1.formatFollowUpAction)(input.decision.followUp),
+        },
+    };
+}
+function renderTimeout(input) {
+    const outcomeKind = "timeout";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildTimeoutSummary)();
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        isAdvisory: false,
+        blocksWorkflow: false,
+        metadata: {
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
+        },
+    };
+}
+function renderUnavailableApi(input) {
+    const outcomeKind = "unavailable_api";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildUnavailableApiSummary)();
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        isAdvisory: false,
+        blocksWorkflow: false,
+        metadata: {
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
+        },
+    };
+}
+function renderRedactionApplied(input) {
+    const outcomeKind = "redaction_applied";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildRedactionAppliedSummary)(input.redactionReport);
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, {
+        artifactFingerprint: input.artifactFingerprint,
+        targetEnvironment: input.targetEnvironment,
+        redactionReport: input.redactionReport,
+    });
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        isAdvisory: true,
+        blocksWorkflow: false,
+        metadata: {
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
+            redactionStatus: (0, templates_1.formatRedactionStatus)(input.redactionReport),
+        },
+    };
+}
+function renderFingerprintMismatch(input) {
+    const outcomeKind = "fingerprint_mismatch";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildFingerprintMismatchSummary)(input.expectedFingerprint, input.actualFingerprint);
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        isAdvisory: false,
+        blocksWorkflow: true,
+        metadata: {
+            targetEnvironment: input.targetEnvironment,
+            expectedFingerprint: input.expectedFingerprint,
+            actualFingerprint: input.actualFingerprint,
+        },
+    };
+}
+
+
+/***/ }),
+
+/***/ 6019:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OUTCOME_TEMPLATES = void 0;
+exports.formatRedactionStatus = formatRedactionStatus;
+exports.formatFollowUpAction = formatFollowUpAction;
+exports.buildPolicyDecisionSummary = buildPolicyDecisionSummary;
+exports.buildTimeoutSummary = buildTimeoutSummary;
+exports.buildUnavailableApiSummary = buildUnavailableApiSummary;
+exports.buildRedactionAppliedSummary = buildRedactionAppliedSummary;
+exports.buildFingerprintMismatchSummary = buildFingerprintMismatchSummary;
+exports.buildErrorDetailLines = buildErrorDetailLines;
+exports.buildPolicyDetailLines = buildPolicyDetailLines;
+exports.buildBodyMarkdown = buildBodyMarkdown;
+exports.OUTCOME_TEMPLATES = {
+    allow: {
+        label: "Decision: Allow",
+        title: "Control9 allowed this change",
+    },
+    deny: {
+        label: "Decision: Deny",
+        title: "Control9 denied this change",
+    },
+    require_approval: {
+        label: "Decision: Approval Required",
+        title: "Control9 requires approval for this change",
+    },
+    observe: {
+        label: "Decision: Observe (Advisory)",
+        title: "Control9 advisory finding",
+    },
+    timeout: {
+        label: "Outcome: Policy API Timeout",
+        title: "Control9 policy request timed out",
+    },
+    unavailable_api: {
+        label: "Outcome: Policy API Unavailable",
+        title: "Control9 policy API is unavailable",
+    },
+    redaction_applied: {
+        label: "Outcome: Redaction Applied",
+        title: "Control9 redaction was applied before submission",
+    },
+    fingerprint_mismatch: {
+        label: "Outcome: Fingerprint Mismatch",
+        title: "Control9 detected an artifact fingerprint mismatch",
+    },
+};
+function formatRedactionStatus(report) {
+    if (!report) {
+        return undefined;
+    }
+    if (report.totalRedactions === 0) {
+        return `No redactions applied (profile: ${report.profile})`;
+    }
+    const markerSummary = report.markers
+        .map((marker) => `${marker.valueClass}: ${marker.count}`)
+        .join(", ");
+    return `${report.totalRedactions} value(s) redacted (profile: ${report.profile}; ${markerSummary})`;
+}
+function formatFollowUpAction(followUp) {
+    if (!followUp) {
+        return undefined;
+    }
+    const approvalUrl = readSafeFollowUpString(followUp, "approval_url", "approvalUrl");
+    if (approvalUrl) {
+        return `Approval required at ${approvalUrl}`;
+    }
+    const action = readSafeFollowUpString(followUp, "action", "action");
+    if (action) {
+        return action;
+    }
+    return undefined;
+}
+function readSafeFollowUpString(followUp, snakeCase, camelCase) {
+    for (const key of [snakeCase, camelCase]) {
+        const value = followUp[key];
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return undefined;
+}
+function buildPolicyDecisionSummary(outcomeKind, decision, runtimeMode) {
+    switch (outcomeKind) {
+        case "allow":
+            return decision.reason;
+        case "deny":
+            return runtimeMode === "shadow"
+                ? `${decision.reason} Shadow mode is active, so this workflow is not blocked by Control9.`
+                : decision.reason;
+        case "require_approval":
+            return runtimeMode === "shadow"
+                ? `${decision.reason} Shadow mode is active, so this workflow is not waiting for approval.`
+                : decision.reason;
+        case "observe":
+            return `${decision.reason} Control9 is reporting an advisory finding and this workflow is not blocked by that decision.`;
+    }
+}
+function buildTimeoutSummary() {
+    return "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
+}
+function buildUnavailableApiSummary() {
+    return "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+}
+function buildRedactionAppliedSummary(report) {
+    const status = formatRedactionStatus(report);
+    return `Sensitive values were redacted from the action envelope before submission. ${status ?? "Redaction completed."}`;
+}
+function buildFingerprintMismatchSummary(expectedFingerprint, actualFingerprint) {
+    const expected = expectedFingerprint ?? "unknown";
+    const actual = actualFingerprint ?? "unknown";
+    return `The current artifact fingerprint (${actual}) does not match the approved fingerprint (${expected}). Review the change set before proceeding with deploy authority.`;
+}
+function buildErrorDetailLines(outcomeKind, options) {
+    const lines = [];
+    if (options.targetEnvironment) {
+        lines.push(`Target environment: ${options.targetEnvironment}`);
+    }
+    if (options.artifactFingerprint) {
+        lines.push(`Artifact fingerprint: ${options.artifactFingerprint}`);
+    }
+    if (outcomeKind === "redaction_applied" && options.redactionReport) {
+        const status = formatRedactionStatus(options.redactionReport);
+        if (status) {
+            lines.push(`Redaction status: ${status}`);
+        }
+    }
+    if (outcomeKind === "fingerprint_mismatch") {
+        if (options.expectedFingerprint) {
+            lines.push(`Expected fingerprint: ${options.expectedFingerprint}`);
+        }
+        if (options.actualFingerprint) {
+            lines.push(`Actual fingerprint: ${options.actualFingerprint}`);
+        }
+    }
+    return lines;
+}
+function buildPolicyDetailLines(options) {
+    const lines = [
+        `Decision kind: ${options.decision.decisionKind}`,
+        `Reason: ${options.decision.reason}`,
+    ];
+    if (options.decision.riskSummary) {
+        lines.push(`Risk summary: ${options.decision.riskSummary}`);
+    }
+    if (options.decision.policyVersion) {
+        lines.push(`Policy version: ${options.decision.policyVersion}`);
+    }
+    lines.push(`Decision id: ${options.decision.decisionId}`);
+    if (options.targetEnvironment) {
+        lines.push(`Target environment: ${options.targetEnvironment}`);
+    }
+    if (options.artifactFingerprint) {
+        lines.push(`Artifact fingerprint: ${options.artifactFingerprint}`);
+    }
+    const redactionStatus = formatRedactionStatus(options.redactionReport);
+    if (redactionStatus) {
+        lines.push(`Redaction status: ${redactionStatus}`);
+    }
+    const followUpAction = formatFollowUpAction(options.decision.followUp);
+    if (followUpAction) {
+        lines.push(`Follow-up action: ${followUpAction}`);
+    }
+    return lines;
+}
+function buildBodyMarkdown(title, summary, detailLines) {
+    const sections = [`## ${title}`, "", summary];
+    if (detailLines.length > 0) {
+        sections.push("", ...detailLines.map((line) => `- ${line}`));
+    }
+    return sections.join("\n");
 }
 
 
@@ -34031,6 +34714,14 @@ module.exports = require("node:events");
 
 "use strict";
 module.exports = require("node:fs");
+
+/***/ }),
+
+/***/ 1455:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:fs/promises");
 
 /***/ }),
 
