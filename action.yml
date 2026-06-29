@@ -1,0 +1,63 @@
+name: Control9 Infrastructure Governance
+description: Build redacted, signed action envelopes from IaC artifacts and request Control9 policy decisions.
+author: Alto9
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  mode:
+    description: Runtime mode. Shadow mode reports findings without blocking deploys.
+    required: false
+    default: shadow
+  control9-api-url:
+    description: Control9 policy API base URL.
+    required: true
+  tenant-id:
+    description: Control9 tenant or installation identity.
+    required: true
+  signing-secret:
+    description: Secret used to sign action envelopes before submission.
+    required: true
+  target-environment:
+    description: Governed environment key for this change (for example staging or production).
+    required: true
+  requested-authority:
+    description: Deploy or change authority requested by this workflow step.
+    required: true
+  iac-tool:
+    description: IaC tool that produced the artifacts (terraform, opentofu, cdk, or cloudformation).
+    required: true
+  command:
+    description: Command category for the supplied artifacts (plan, synth, diff, or deploy-verification).
+    required: true
+  artifact-paths:
+    description: Comma-separated paths to plan JSON, synthesized templates, or diff artifacts relative to working-directory.
+    required: true
+  working-directory:
+    description: Repository-relative directory containing artifact paths.
+    required: false
+    default: .
+  redaction-profile:
+    description: Optional redaction profile name. Defaults to the standard Control9 profile when omitted.
+    required: false
+  redaction-additional-patterns:
+    description: Optional comma-separated extra redaction patterns applied before envelope construction.
+    required: false
+
+outputs:
+  envelope-id:
+    description: Control9 envelope identifier after successful submission.
+  artifact-fingerprint:
+    description: Stable fingerprint for the normalized artifact content.
+  decision-id:
+    description: Control9 policy decision identifier.
+  decision-kind:
+    description: Normalized decision kind (allow, deny, require_approval, or observe).
+  summary-path:
+    description: Path to the local summary JSON written for workflow rendering.
+
+runs:
+  using: node20
+  main: dist/index.js

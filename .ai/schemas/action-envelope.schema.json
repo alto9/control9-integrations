@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "control9.action-envelope.v0",
+  "title": "Control9 Action Envelope",
+  "description": "Signed, redacted action envelope submitted from customer CI integrations to Control9 ingestion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "envelopeId",
+    "correlationId",
+    "providerContext",
+    "runIdentity",
+    "tenantIdentity",
+    "repositoryIdentity",
+    "refOrPullRequestIdentity",
+    "actorIdentity",
+    "commandCategory",
+    "iacTool",
+    "environment",
+    "requestedAuthority",
+    "runtimeMode",
+    "normalizedChangeSummary",
+    "redactionReport",
+    "artifactFingerprints",
+    "signature"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "control9.action-envelope.v0"
+    },
+    "envelopeId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "providerContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "const": "github"
+        },
+        "eventName": {
+          "type": "string"
+        },
+        "apiUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "runIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "runAttempt", "workflow", "job"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1 },
+        "runAttempt": { "type": "string", "minLength": 1 },
+        "workflow": { "type": "string", "minLength": 1 },
+        "job": { "type": "string", "minLength": 1 }
+      }
+    },
+    "tenantIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId"],
+      "properties": {
+        "tenantId": { "type": "string", "minLength": 1 }
+      }
+    },
+    "repositoryIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "name", "fullName"],
+      "properties": {
+        "owner": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string", "minLength": 1 }
+      }
+    },
+    "refOrPullRequestIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "sha"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 1 },
+        "sha": { "type": "string", "minLength": 1 },
+        "pullRequestNumber": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "actorIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["login", "actorType"],
+      "properties": {
+        "login": { "type": "string", "minLength": 1 },
+        "actorType": { "type": "string", "minLength": 1 }
+      }
+    },
+    "commandCategory": {
+      "type": "string",
+      "enum": ["plan", "synth", "diff", "deploy-verification"]
+    },
+    "iacTool": {
+      "type": "string",
+      "enum": ["terraform", "opentofu", "cdk", "cloudformation"]
+    },
+    "environment": { "type": "string", "minLength": 1 },
+    "requestedAuthority": { "type": "string", "minLength": 1 },
+    "runtimeMode": {
+      "type": "string",
+      "enum": ["shadow", "enforce"]
+    },
+    "normalizedChangeSummary": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "redactionReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "markers", "totalRedactions"],
+      "properties": {
+        "profile": { "type": "string", "minLength": 1 },
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["marker", "valueClass", "count"],
+            "properties": {
+              "marker": { "type": "string", "minLength": 1 },
+              "valueClass": { "type": "string", "minLength": 1 },
+              "count": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "totalRedactions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "artifactFingerprints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "fingerprint"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "keyId", "signature", "signedAt"],
+      "properties": {
+        "algorithm": { "type": "string", "const": "hmac-sha256" },
+        "keyId": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+        "signature": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "signedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

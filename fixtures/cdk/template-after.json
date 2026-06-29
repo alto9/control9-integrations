@@ -1,0 +1,16 @@
+{
+  "Resources": {
+    "ExampleBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "example-bucket-renamed"
+      }
+    },
+    "NewTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": "new-topic"
+      }
+    }
+  }
+}
