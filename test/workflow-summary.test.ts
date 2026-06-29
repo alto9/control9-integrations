@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PolicyDecision, RedactionReport } from "../src/envelope/types";
 import {
@@ -33,30 +33,6 @@ function renderPolicyDecision(
     redactionReport,
     runtimeMode,
   });
-}
-
-function withoutGithubPrEnv<T>(run: () => T): T {
-  const previous = {
-    GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
-    GITHUB_EVENT_PATH: process.env.GITHUB_EVENT_PATH,
-    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
-  };
-
-  delete process.env.GITHUB_EVENT_NAME;
-  delete process.env.GITHUB_EVENT_PATH;
-  delete process.env.GITHUB_TOKEN;
-
-  try {
-    return run();
-  } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
 }
 
 describe("buildWorkflowSummarySection", () => {
@@ -141,6 +117,16 @@ describe("emitDecisionAnnotation", () => {
 });
 
 describe("publishWorkflowFeedback", () => {
+  beforeEach(() => {
+    vi.stubEnv("GITHUB_EVENT_NAME", "");
+    vi.stubEnv("GITHUB_EVENT_PATH", "");
+    vi.stubEnv("GITHUB_TOKEN", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it.each([
     "allow",
     "deny",
@@ -162,12 +148,10 @@ describe("publishWorkflowFeedback", () => {
         policyVersion: "2026.06.1",
       });
 
-      const result = await withoutGithubPrEnv(() =>
-        publishWorkflowFeedback({
-          rendered,
-          summaryPath: "/tmp/control9-summary.json",
-        }),
-      );
+      const result = await publishWorkflowFeedback({
+        rendered,
+        summaryPath: "/tmp/control9-summary.json",
+      });
 
       expect(result.summaryWritten).toBe(true);
       expect(result.usedLogFallback).toBe(false);
@@ -207,11 +191,9 @@ describe("publishWorkflowFeedback", () => {
     const info = vi.fn();
 
     try {
-      const result = await withoutGithubPrEnv(() =>
-        publishWorkflowFeedback(
-          { rendered, summaryPath: "/tmp/control9-summary.json" },
-          { info },
-        ),
+      const result = await publishWorkflowFeedback(
+        { rendered, summaryPath: "/tmp/control9-summary.json" },
+        { info },
       );
 
       expect(result.summaryWritten).toBe(false);
@@ -254,7 +236,7 @@ describe("publishWorkflowFeedback", () => {
                 })
               : renderDecisionFeedback({ kind });
 
-        const result = await withoutGithubPrEnv(() => publishWorkflowFeedback({ rendered }));
+        const result = await publishWorkflowFeedback({ rendered });
         expect(result.summaryWritten).toBe(true);
         expect(readFileSync(summaryPath, "utf8")).toContain(SUMMARY_SECTION_HEADING);
       }
