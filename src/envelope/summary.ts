@@ -4,20 +4,48 @@ import {
   fingerprintNormalizedPlan,
   parsePlanJsonFile,
 } from "../plan";
+import {
+  buildNormalizedTemplateSummary,
+  fingerprintNormalizedTemplate,
+  parseTemplateFile,
+} from "../template";
 import type { NormalizedChangeSummary } from "./types";
 
 function summarizeTemplateArtifacts(
   inputs: ActionInputs,
   routed: RoutedCommand,
 ): NormalizedChangeSummary {
+  const templates = routed.resolvedArtifactPaths.map((artifactPath) =>
+    parseTemplateFile(artifactPath),
+  );
+  const normalized = buildNormalizedTemplateSummary(templates, {
+    iacTool: inputs.iacTool,
+    command: routed.command as "synth" | "diff" | "deploy-verification",
+    artifactPaths: routed.artifactPaths,
+  });
+  const templateFingerprint = fingerprintNormalizedTemplate(
+    normalized.templateFingerprintInput,
+  );
+
   return {
     summaryKind: "template",
     commandCategory: routed.command,
-    iacTool: routed.iacTool,
+    iacTool: inputs.iacTool,
     artifactCount: routed.resolvedArtifactPaths.length,
+    resourceActionCounts: normalized.resourceActionCounts,
+    resourceAddresses: normalized.resourceLogicalIds,
+    providerHints: normalized.resourceTypes,
     details: {
-      artifactPaths: routed.artifactPaths,
+      templateFormatVersion: normalized.templateFormatVersion,
+      stackNames: normalized.stackNames,
+      accountHints: normalized.accountHints,
+      regionHints: normalized.regionHints,
+      targetEnvironment: inputs.targetEnvironment,
+      requestedAuthority: inputs.requestedAuthority,
       workingDirectory: inputs.workingDirectory,
+      sensitiveResourceHints: normalized.sensitiveResourceHints,
+      sourceTool: normalized.sourceTool,
+      templateFingerprint,
     },
   };
 }

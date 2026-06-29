@@ -1,0 +1,16 @@
+{
+  "Resources": {
+    "ExampleBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "example-bucket"
+      }
+    },
+    "LegacyQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "QueueName": "legacy-queue"
+      }
+    }
+  }
+}
