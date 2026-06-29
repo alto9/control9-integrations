@@ -25994,52 +25994,13 @@ function verifyEnvelopeSignature(envelope, signingSecret) {
 /***/ }),
 
 /***/ 344:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildNormalizedChangeSummary = buildNormalizedChangeSummary;
-const node_fs_1 = __nccwpck_require__(3024);
-const node_path_1 = __importDefault(__nccwpck_require__(6760));
-function countResourceActions(plan) {
-    const counts = {};
-    for (const change of plan.resource_changes ?? []) {
-        for (const action of change.change?.actions ?? []) {
-            counts[action] = (counts[action] ?? 0) + 1;
-        }
-    }
-    return counts;
-}
-function summarizeTerraformPlan(resolvedArtifactPaths) {
-    const planPath = resolvedArtifactPaths[0];
-    const parsed = JSON.parse((0, node_fs_1.readFileSync)(planPath, "utf8"));
-    const resourceActionCounts = countResourceActions(parsed);
-    const resourceAddresses = (parsed.resource_changes ?? [])
-        .map((change) => change.address)
-        .filter((address) => Boolean(address))
-        .sort();
-    const providerHints = [
-        ...new Set((parsed.resource_changes ?? [])
-            .map((change) => change.provider_name)
-            .filter((provider) => Boolean(provider))),
-    ].sort();
-    return {
-        summaryKind: "terraform-plan",
-        commandCategory: "plan",
-        iacTool: "terraform",
-        artifactCount: resolvedArtifactPaths.length,
-        resourceActionCounts,
-        resourceAddresses,
-        providerHints,
-        details: {
-            planFingerprintInput: node_path_1.default.basename(planPath),
-        },
-    };
-}
+const plan_1 = __nccwpck_require__(5887);
 function summarizeTemplateArtifacts(inputs, routed) {
     return {
         summaryKind: "template",
@@ -26064,15 +26025,37 @@ function summarizeGeneric(inputs, routed) {
         },
     };
 }
+function summarizePlanArtifacts(inputs, routed) {
+    const planPath = routed.resolvedArtifactPaths[0];
+    const plan = (0, plan_1.parsePlanJsonFile)(planPath);
+    const normalized = (0, plan_1.buildNormalizedPlanSummary)(plan, {
+        workingDirectory: inputs.workingDirectory,
+        iacTool: inputs.iacTool,
+    });
+    const planFingerprint = (0, plan_1.fingerprintNormalizedPlan)(normalized.planFingerprintInput);
+    return {
+        summaryKind: "terraform-plan",
+        commandCategory: routed.command,
+        iacTool: inputs.iacTool,
+        artifactCount: routed.resolvedArtifactPaths.length,
+        resourceActionCounts: normalized.resourceActionCounts,
+        resourceAddresses: normalized.resourceAddresses,
+        providerHints: normalized.providerHints,
+        details: {
+            formatVersion: normalized.formatVersion,
+            targetWorkspace: normalized.targetWorkspace,
+            targetEnvironment: inputs.targetEnvironment,
+            requestedAuthority: inputs.requestedAuthority,
+            workingDirectory: inputs.workingDirectory,
+            sensitiveResourceHints: normalized.sensitiveResourceHints,
+            planFingerprint,
+        },
+    };
+}
 function buildNormalizedChangeSummary(inputs, routed) {
     if ((inputs.iacTool === "terraform" || inputs.iacTool === "opentofu") &&
         (routed.command === "plan" || routed.command === "deploy-verification")) {
-        const summary = summarizeTerraformPlan(routed.resolvedArtifactPaths);
-        return {
-            ...summary,
-            iacTool: inputs.iacTool,
-            commandCategory: routed.command,
-        };
+        return summarizePlanArtifacts(inputs, routed);
     }
     if (inputs.iacTool === "cdk" || inputs.iacTool === "cloudformation") {
         return summarizeTemplateArtifacts(inputs, routed);
@@ -26331,6 +26314,218 @@ function buildActionResult(summaryPath, artifactFingerprint, envelope, decision)
         summaryPath,
     };
 }
+
+
+/***/ }),
+
+/***/ 1731:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.fingerprintNormalizedPlan = fingerprintNormalizedPlan;
+const fingerprint_1 = __nccwpck_require__(4440);
+function fingerprintNormalizedPlan(input) {
+    return (0, fingerprint_1.fingerprintPayload)(input);
+}
+
+
+/***/ }),
+
+/***/ 5887:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SUPPORTED_PLAN_FORMAT_VERSIONS = exports.parsePlanJsonFile = exports.parsePlanJsonContent = exports.normalizeResourceAction = exports.countResourceActions = exports.buildNormalizedPlanSummary = exports.fingerprintNormalizedPlan = void 0;
+var fingerprint_1 = __nccwpck_require__(1731);
+Object.defineProperty(exports, "fingerprintNormalizedPlan", ({ enumerable: true, get: function () { return fingerprint_1.fingerprintNormalizedPlan; } }));
+var normalize_1 = __nccwpck_require__(3424);
+Object.defineProperty(exports, "buildNormalizedPlanSummary", ({ enumerable: true, get: function () { return normalize_1.buildNormalizedPlanSummary; } }));
+Object.defineProperty(exports, "countResourceActions", ({ enumerable: true, get: function () { return normalize_1.countResourceActions; } }));
+Object.defineProperty(exports, "normalizeResourceAction", ({ enumerable: true, get: function () { return normalize_1.normalizeResourceAction; } }));
+var parse_1 = __nccwpck_require__(2460);
+Object.defineProperty(exports, "parsePlanJsonContent", ({ enumerable: true, get: function () { return parse_1.parsePlanJsonContent; } }));
+Object.defineProperty(exports, "parsePlanJsonFile", ({ enumerable: true, get: function () { return parse_1.parsePlanJsonFile; } }));
+var types_1 = __nccwpck_require__(9898);
+Object.defineProperty(exports, "SUPPORTED_PLAN_FORMAT_VERSIONS", ({ enumerable: true, get: function () { return types_1.SUPPORTED_PLAN_FORMAT_VERSIONS; } }));
+
+
+/***/ }),
+
+/***/ 3424:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeResourceAction = normalizeResourceAction;
+exports.countResourceActions = countResourceActions;
+exports.buildNormalizedPlanSummary = buildNormalizedPlanSummary;
+const IAM_RESOURCE_TYPES = new Set([
+    "aws_iam_role",
+    "aws_iam_policy",
+    "aws_iam_role_policy",
+    "aws_iam_role_policy_attachment",
+    "aws_iam_user",
+    "aws_iam_user_policy",
+    "aws_iam_group",
+    "aws_iam_group_policy",
+    "aws_iam_instance_profile",
+    "aws_iam_access_key",
+    "google_project_iam_member",
+    "google_service_account",
+    "azurerm_role_assignment",
+]);
+function emptyActionCounts() {
+    return {
+        create: 0,
+        update: 0,
+        delete: 0,
+        replace: 0,
+        "no-op": 0,
+    };
+}
+function normalizeResourceAction(actions) {
+    const normalized = [...actions].sort();
+    if (normalized.length === 1) {
+        const action = normalized[0];
+        if (action === "create" ||
+            action === "update" ||
+            action === "delete" ||
+            action === "no-op") {
+            return action;
+        }
+    }
+    if (normalized.length === 2 &&
+        normalized.includes("create") &&
+        normalized.includes("delete")) {
+        return "replace";
+    }
+    return "update";
+}
+function countResourceActions(resourceChanges) {
+    const counts = emptyActionCounts();
+    for (const change of resourceChanges) {
+        const action = normalizeResourceAction(change.change?.actions ?? []);
+        counts[action] += 1;
+    }
+    return counts;
+}
+function collectSensitiveResourceHints(resourceChanges) {
+    const hints = new Set();
+    for (const change of resourceChanges) {
+        const resourceType = change.type;
+        if (resourceType && IAM_RESOURCE_TYPES.has(resourceType)) {
+            hints.add(resourceType);
+        }
+        if (change.address?.includes("iam")) {
+            hints.add(change.address);
+        }
+    }
+    return [...hints].sort();
+}
+function resolveTargetWorkspace(plan, workingDirectory) {
+    const workspaceName = plan
+        .workspace?.name;
+    if (typeof workspaceName === "string" && workspaceName.trim().length > 0) {
+        return workspaceName;
+    }
+    if (workingDirectory.trim().length > 0 && workingDirectory !== ".") {
+        return workingDirectory;
+    }
+    return undefined;
+}
+function buildNormalizedPlanSummary(plan, options) {
+    const resourceChanges = plan.resource_changes ?? [];
+    const resourceActionCounts = countResourceActions(resourceChanges);
+    const resourceAddresses = resourceChanges
+        .map((change) => change.address)
+        .filter((address) => Boolean(address))
+        .sort();
+    const providerHints = [
+        ...new Set(resourceChanges
+            .map((change) => change.provider_name)
+            .filter((provider) => Boolean(provider))),
+    ].sort();
+    const sensitiveResourceHints = collectSensitiveResourceHints(resourceChanges);
+    const formatVersion = plan.format_version ?? "unknown";
+    const planFingerprintInput = {
+        formatVersion,
+        resourceActionCounts,
+        resourceAddresses,
+        providerHints,
+        sensitiveResourceHints,
+    };
+    return {
+        resourceActionCounts,
+        resourceAddresses,
+        providerHints,
+        sensitiveResourceHints,
+        targetWorkspace: resolveTargetWorkspace(plan, options.workingDirectory),
+        formatVersion,
+        planFingerprintInput,
+    };
+}
+
+
+/***/ }),
+
+/***/ 2460:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parsePlanJsonContent = parsePlanJsonContent;
+exports.parsePlanJsonFile = parsePlanJsonFile;
+const node_fs_1 = __nccwpck_require__(3024);
+const types_1 = __nccwpck_require__(8522);
+const types_2 = __nccwpck_require__(9898);
+function assertPlanObject(parsed) {
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new types_1.Control9ActionError("Terraform/OpenTofu plan JSON must be a JSON object produced by `terraform show -json` or `tofu show -json`.");
+    }
+}
+function parsePlanJsonContent(content) {
+    let parsed;
+    try {
+        parsed = JSON.parse(content);
+    }
+    catch {
+        throw new types_1.Control9ActionError("Terraform/OpenTofu plan JSON is malformed and could not be parsed.");
+    }
+    assertPlanObject(parsed);
+    const formatVersion = parsed.format_version;
+    if (typeof formatVersion !== "string" || formatVersion.trim().length === 0) {
+        throw new types_1.Control9ActionError("Terraform/OpenTofu plan JSON is missing a supported format_version field.");
+    }
+    if (!types_2.SUPPORTED_PLAN_FORMAT_VERSIONS.has(formatVersion)) {
+        throw new types_1.Control9ActionError(`Unsupported Terraform/OpenTofu plan format_version "${formatVersion}". Supported versions: ${[...types_2.SUPPORTED_PLAN_FORMAT_VERSIONS].join(", ")}.`);
+    }
+    if (!Array.isArray(parsed.resource_changes)) {
+        throw new types_1.Control9ActionError("Terraform/OpenTofu plan JSON is missing a resource_changes array.");
+    }
+    return parsed;
+}
+function parsePlanJsonFile(planPath) {
+    const content = (0, node_fs_1.readFileSync)(planPath, "utf8");
+    return parsePlanJsonContent(content);
+}
+
+
+/***/ }),
+
+/***/ 9898:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SUPPORTED_PLAN_FORMAT_VERSIONS = void 0;
+exports.SUPPORTED_PLAN_FORMAT_VERSIONS = new Set(["1.0", "1.1", "1.2"]);
 
 
 /***/ }),

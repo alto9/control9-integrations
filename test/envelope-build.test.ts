@@ -54,7 +54,13 @@ describe("buildSignedActionEnvelope", () => {
     expect(envelope.schemaVersion).toBe("control9.action-envelope.v0");
     expect(envelope.envelopeId).toMatch(/^[a-f0-9]{64}$/);
     expect(envelope.normalizedChangeSummary.summaryKind).toBe("terraform-plan");
-    expect(envelope.normalizedChangeSummary.resourceActionCounts).toEqual({ create: 1 });
+    expect(envelope.normalizedChangeSummary.resourceActionCounts).toEqual({
+      create: 1,
+      update: 0,
+      delete: 0,
+      replace: 0,
+      "no-op": 0,
+    });
     expect(verifyEnvelopeSignature(envelope, "test-signing-secret")).toBe(true);
     expect(containsRawSecretMarkers(envelope)).toBe(false);
     expect(JSON.stringify(envelope)).not.toContain("test-signing-secret");

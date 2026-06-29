@@ -1,58 +1,10 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
 import type { ActionInputs, RoutedCommand } from "../types";
+import {
+  buildNormalizedPlanSummary,
+  fingerprintNormalizedPlan,
+  parsePlanJsonFile,
+} from "../plan";
 import type { NormalizedChangeSummary } from "./types";
-
-interface TerraformPlanShape {
-  resource_changes?: Array<{
-    address?: string;
-    provider_name?: string;
-    change?: {
-      actions?: string[];
-    };
-  }>;
-}
-
-function countResourceActions(plan: TerraformPlanShape): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const change of plan.resource_changes ?? []) {
-    for (const action of change.change?.actions ?? []) {
-      counts[action] = (counts[action] ?? 0) + 1;
-    }
-  }
-  return counts;
-}
-
-function summarizeTerraformPlan(resolvedArtifactPaths: string[]): NormalizedChangeSummary {
-  const planPath = resolvedArtifactPaths[0];
-  const parsed = JSON.parse(readFileSync(planPath, "utf8")) as TerraformPlanShape;
-  const resourceActionCounts = countResourceActions(parsed);
-  const resourceAddresses = (parsed.resource_changes ?? [])
-    .map((change) => change.address)
-    .filter((address): address is string => Boolean(address))
-    .sort();
-  const providerHints = [
-    ...new Set(
-      (parsed.resource_changes ?? [])
-        .map((change) => change.provider_name)
-        .filter((provider): provider is string => Boolean(provider)),
-    ),
-  ].sort();
-
-  return {
-    summaryKind: "terraform-plan",
-    commandCategory: "plan",
-    iacTool: "terraform",
-    artifactCount: resolvedArtifactPaths.length,
-    resourceActionCounts,
-    resourceAddresses,
-    providerHints,
-    details: {
-      planFingerprintInput: path.basename(planPath),
-    },
-  };
-}
 
 function summarizeTemplateArtifacts(
   inputs: ActionInputs,
@@ -86,6 +38,38 @@ function summarizeGeneric(
   };
 }
 
+function summarizePlanArtifacts(
+  inputs: ActionInputs,
+  routed: RoutedCommand,
+): NormalizedChangeSummary {
+  const planPath = routed.resolvedArtifactPaths[0];
+  const plan = parsePlanJsonFile(planPath);
+  const normalized = buildNormalizedPlanSummary(plan, {
+    workingDirectory: inputs.workingDirectory,
+    iacTool: inputs.iacTool,
+  });
+  const planFingerprint = fingerprintNormalizedPlan(normalized.planFingerprintInput);
+
+  return {
+    summaryKind: "terraform-plan",
+    commandCategory: routed.command,
+    iacTool: inputs.iacTool,
+    artifactCount: routed.resolvedArtifactPaths.length,
+    resourceActionCounts: normalized.resourceActionCounts,
+    resourceAddresses: normalized.resourceAddresses,
+    providerHints: normalized.providerHints,
+    details: {
+      formatVersion: normalized.formatVersion,
+      targetWorkspace: normalized.targetWorkspace,
+      targetEnvironment: inputs.targetEnvironment,
+      requestedAuthority: inputs.requestedAuthority,
+      workingDirectory: inputs.workingDirectory,
+      sensitiveResourceHints: normalized.sensitiveResourceHints,
+      planFingerprint,
+    },
+  };
+}
+
 export function buildNormalizedChangeSummary(
   inputs: ActionInputs,
   routed: RoutedCommand,
@@ -94,12 +78,7 @@ export function buildNormalizedChangeSummary(
     (inputs.iacTool === "terraform" || inputs.iacTool === "opentofu") &&
     (routed.command === "plan" || routed.command === "deploy-verification")
   ) {
-    const summary = summarizeTerraformPlan(routed.resolvedArtifactPaths);
-    return {
-      ...summary,
-      iacTool: inputs.iacTool,
-      commandCategory: routed.command,
-    };
+    return summarizePlanArtifacts(inputs, routed);
   }
 
   if (inputs.iacTool === "cdk" || inputs.iacTool === "cloudformation") {
