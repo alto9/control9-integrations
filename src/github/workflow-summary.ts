@@ -3,11 +3,12 @@ import { appendFile } from "node:fs/promises";
 import * as core from "@actions/core";
 
 import type { RenderedDecisionFeedback } from "../rendering/types";
+import { publishPrComment, type PrCommentState } from "./pr-comment";
 
 export const SUMMARY_ENV_VAR = "GITHUB_STEP_SUMMARY";
 export const SUMMARY_SECTION_HEADING = "Control9 Policy Decision";
 
-export type PrCommentState = "not_applicable" | "pending" | "posted";
+export type { PrCommentState };
 
 export interface PublishWorkflowFeedbackInput {
   rendered: RenderedDecisionFeedback;
@@ -105,9 +106,11 @@ export async function publishWorkflowFeedback(
     }
   }
 
+  const prComment = await publishPrComment({ rendered: input.rendered });
+
   return {
     summaryWritten,
-    prCommentState: "not_applicable",
+    prCommentState: prComment.state,
     usedLogFallback,
   };
 }

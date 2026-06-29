@@ -32825,6 +32825,204 @@ function validateActionEnvelopeSchema(envelope) {
 
 /***/ }),
 
+/***/ 1685:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitHubApiError = exports.CONTROL9_COMMENT_MARKER_PREFIX = void 0;
+exports.buildCommentMarker = buildCommentMarker;
+exports.buildPrCommentBody = buildPrCommentBody;
+exports.readPrCommentContextFromEnv = readPrCommentContextFromEnv;
+exports.createFetchGitHubCommentsClient = createFetchGitHubCommentsClient;
+exports.publishPrComment = publishPrComment;
+const node_fs_1 = __nccwpck_require__(3024);
+const core = __importStar(__nccwpck_require__(7484));
+const workflow_summary_1 = __nccwpck_require__(3151);
+exports.CONTROL9_COMMENT_MARKER_PREFIX = "control9-pr-feedback";
+function readEnv(name) {
+    return process.env[name]?.trim() ?? "";
+}
+function isPullRequestEvent(eventName) {
+    return eventName === "pull_request" || eventName === "pull_request_target";
+}
+function readPullRequestNumberFromEvent(eventPath) {
+    try {
+        const payload = JSON.parse((0, node_fs_1.readFileSync)(eventPath, "utf8"));
+        const number = payload.pull_request?.number;
+        if (typeof number === "number" && Number.isFinite(number) && number > 0) {
+            return number;
+        }
+    }
+    catch {
+        return undefined;
+    }
+    return undefined;
+}
+function buildCommentMarker(context) {
+    return `<!-- ${exports.CONTROL9_COMMENT_MARKER_PREFIX}:workflow=${context.workflow}:job=${context.job} -->`;
+}
+function buildPrCommentBody(rendered, marker) {
+    return `${marker}\n\n${(0, workflow_summary_1.buildWorkflowSummarySection)(rendered)}`;
+}
+function readPrCommentContextFromEnv() {
+    const eventName = readEnv("GITHUB_EVENT_NAME");
+    if (!isPullRequestEvent(eventName)) {
+        return undefined;
+    }
+    const eventPath = readEnv("GITHUB_EVENT_PATH");
+    const pullRequestNumber = eventPath ? readPullRequestNumberFromEvent(eventPath) : undefined;
+    if (!pullRequestNumber) {
+        return undefined;
+    }
+    const token = readEnv("GITHUB_TOKEN");
+    if (!token) {
+        return undefined;
+    }
+    const repository = readEnv("GITHUB_REPOSITORY");
+    const [owner, repo] = repository.split("/");
+    if (!owner || !repo) {
+        return undefined;
+    }
+    return {
+        apiUrl: readEnv("GITHUB_API_URL") || "https://api.github.com",
+        token,
+        owner,
+        repo,
+        pullRequestNumber,
+        workflow: readEnv("GITHUB_WORKFLOW") || "workflow",
+        job: readEnv("GITHUB_JOB") || "job",
+        eventName,
+    };
+}
+function isPermissionError(error) {
+    return error instanceof GitHubApiError && isPermissionErrorStatus(error.status);
+}
+function isPermissionErrorStatus(status) {
+    return status === 401 || status === 403;
+}
+class GitHubApiError extends Error {
+    status;
+    constructor(status, message) {
+        super(message);
+        this.status = status;
+        this.name = "GitHubApiError";
+    }
+}
+exports.GitHubApiError = GitHubApiError;
+function createFetchGitHubCommentsClient(apiUrl, token) {
+    const baseUrl = apiUrl.replace(/\/$/, "");
+    async function request(method, path, body) {
+        const response = await fetch(`${baseUrl}${path}`, {
+            method,
+            headers: {
+                Accept: "application/vnd.github+json",
+                Authorization: `Bearer ${token}`,
+                "X-GitHub-Api-Version": "2022-11-28",
+                ...(body ? { "Content-Type": "application/json" } : {}),
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        if (!response.ok) {
+            throw new GitHubApiError(response.status, `GitHub API ${method} ${path} failed`);
+        }
+        return (await response.json());
+    }
+    return {
+        async listIssueComments(owner, repo, issueNumber) {
+            return request("GET", `/repos/${owner}/${repo}/issues/${issueNumber}/comments`);
+        },
+        async createIssueComment(owner, repo, issueNumber, commentBody) {
+            return request("POST", `/repos/${owner}/${repo}/issues/${issueNumber}/comments`, { body: commentBody });
+        },
+        async updateIssueComment(owner, repo, commentId, commentBody) {
+            return request("PATCH", `/repos/${owner}/${repo}/issues/comments/${commentId}`, { body: commentBody });
+        },
+    };
+}
+function findExistingComment(comments, marker) {
+    return comments.find((comment) => comment.body.includes(marker));
+}
+async function publishPrComment(input, deps = {}) {
+    const resolved = {
+        readContext: readPrCommentContextFromEnv,
+        warning: (message) => {
+            core.warning(message);
+        },
+        client: createFetchGitHubCommentsClient(readEnv("GITHUB_API_URL") || "https://api.github.com", readEnv("GITHUB_TOKEN")),
+        ...deps,
+    };
+    const context = resolved.readContext();
+    if (!context) {
+        const eventName = readEnv("GITHUB_EVENT_NAME");
+        if (!isPullRequestEvent(eventName)) {
+            return { state: "skipped-no-pr" };
+        }
+        if (!readEnv("GITHUB_TOKEN")) {
+            return { state: "skipped-no-token" };
+        }
+        return { state: "skipped-no-pr" };
+    }
+    const marker = buildCommentMarker(context);
+    const body = buildPrCommentBody(input.rendered, marker);
+    try {
+        const comments = await resolved.client.listIssueComments(context.owner, context.repo, context.pullRequestNumber);
+        const existing = findExistingComment(comments, marker);
+        if (existing) {
+            const updated = await resolved.client.updateIssueComment(context.owner, context.repo, existing.id, body);
+            return { state: "updated", commentId: updated.id };
+        }
+        const created = await resolved.client.createIssueComment(context.owner, context.repo, context.pullRequestNumber, body);
+        return { state: "created", commentId: created.id };
+    }
+    catch (error) {
+        if (isPermissionError(error)) {
+            resolved.warning("Control9 skipped pull request comment: insufficient GitHub token permissions.");
+            return { state: "skipped-permission" };
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        resolved.warning(`Control9 pull request comment failed; workflow summary and logs remain available. ${message}`);
+        return { state: "failed-fallback" };
+    }
+}
+
+
+/***/ }),
+
 /***/ 3151:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -32872,6 +33070,7 @@ exports.appendWorkflowSummary = appendWorkflowSummary;
 exports.publishWorkflowFeedback = publishWorkflowFeedback;
 const promises_1 = __nccwpck_require__(1455);
 const core = __importStar(__nccwpck_require__(7484));
+const pr_comment_1 = __nccwpck_require__(1685);
 exports.SUMMARY_ENV_VAR = "GITHUB_STEP_SUMMARY";
 exports.SUMMARY_SECTION_HEADING = "Control9 Policy Decision";
 function buildWorkflowSummarySection(rendered) {
@@ -32935,9 +33134,10 @@ async function publishWorkflowFeedback(input, deps = {}) {
             resolved.info(`Local summary JSON: ${input.summaryPath}`);
         }
     }
+    const prComment = await (0, pr_comment_1.publishPrComment)({ rendered: input.rendered });
     return {
         summaryWritten,
-        prCommentState: "not_applicable",
+        prCommentState: prComment.state,
         usedLogFallback,
     };
 }

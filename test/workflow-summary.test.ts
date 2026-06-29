@@ -145,7 +145,7 @@ describe("publishWorkflowFeedback", () => {
 
       expect(result.summaryWritten).toBe(true);
       expect(result.usedLogFallback).toBe(false);
-      expect(result.prCommentState).toBe("not_applicable");
+      expect(result.prCommentState).toBe("skipped-no-pr");
       const written = readFileSync(summaryPath, "utf8");
       expect(written).toContain(SUMMARY_SECTION_HEADING);
       expect(written).toContain(`Decision kind: ${decisionKind}`);
