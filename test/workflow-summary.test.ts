@@ -35,6 +35,30 @@ function renderPolicyDecision(
   });
 }
 
+function withoutGithubPrEnv<T>(run: () => T): T {
+  const previous = {
+    GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
+    GITHUB_EVENT_PATH: process.env.GITHUB_EVENT_PATH,
+    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+  };
+
+  delete process.env.GITHUB_EVENT_NAME;
+  delete process.env.GITHUB_EVENT_PATH;
+  delete process.env.GITHUB_TOKEN;
+
+  try {
+    return run();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 describe("buildWorkflowSummarySection", () => {
   it("includes the stable Control9 Policy Decision heading", () => {
     const rendered = renderPolicyDecision({
@@ -138,10 +162,12 @@ describe("publishWorkflowFeedback", () => {
         policyVersion: "2026.06.1",
       });
 
-      const result = await publishWorkflowFeedback({
-        rendered,
-        summaryPath: "/tmp/control9-summary.json",
-      });
+      const result = await withoutGithubPrEnv(() =>
+        publishWorkflowFeedback({
+          rendered,
+          summaryPath: "/tmp/control9-summary.json",
+        }),
+      );
 
       expect(result.summaryWritten).toBe(true);
       expect(result.usedLogFallback).toBe(false);
@@ -181,9 +207,11 @@ describe("publishWorkflowFeedback", () => {
     const info = vi.fn();
 
     try {
-      const result = await publishWorkflowFeedback(
-        { rendered, summaryPath: "/tmp/control9-summary.json" },
-        { info },
+      const result = await withoutGithubPrEnv(() =>
+        publishWorkflowFeedback(
+          { rendered, summaryPath: "/tmp/control9-summary.json" },
+          { info },
+        ),
       );
 
       expect(result.summaryWritten).toBe(false);
@@ -226,7 +254,7 @@ describe("publishWorkflowFeedback", () => {
                 })
               : renderDecisionFeedback({ kind });
 
-        const result = await publishWorkflowFeedback({ rendered });
+        const result = await withoutGithubPrEnv(() => publishWorkflowFeedback({ rendered }));
         expect(result.summaryWritten).toBe(true);
         expect(readFileSync(summaryPath, "utf8")).toContain(SUMMARY_SECTION_HEADING);
       }
