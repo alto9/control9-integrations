@@ -25643,6 +25643,458 @@ module.exports = {
 
 /***/ }),
 
+/***/ 1252:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.buildSignedActionEnvelope = buildSignedActionEnvelope;
+const routing_1 = __nccwpck_require__(6357);
+const github_context_1 = __nccwpck_require__(4347);
+const sign_1 = __nccwpck_require__(9515);
+const redact_1 = __nccwpck_require__(6755);
+const summary_1 = __nccwpck_require__(344);
+const types_1 = __nccwpck_require__(7125);
+function buildArtifactFingerprints(routed) {
+    return routed.artifactPaths.map((artifactPath, index) => ({
+        path: artifactPath,
+        fingerprint: (0, routing_1.fingerprintArtifacts)([routed.resolvedArtifactPaths[index]]),
+    }));
+}
+function buildSignedActionEnvelope(inputs, routed, options = {}) {
+    const githubContext = options.githubContext ?? (0, github_context_1.readGitHubWorkflowContext)();
+    const rawSummary = (0, summary_1.buildNormalizedChangeSummary)(inputs, routed);
+    const redactionProfile = inputs.redactionProfile ?? "standard";
+    const { redacted, report } = (0, redact_1.redactPayload)(rawSummary, redactionProfile, inputs.redactionAdditionalPatterns);
+    const unsignedBody = {
+        schemaVersion: types_1.ENVELOPE_SCHEMA_VERSION,
+        correlationId: githubContext.correlationId,
+        providerContext: githubContext.providerContext,
+        runIdentity: githubContext.runIdentity,
+        tenantIdentity: {
+            tenantId: inputs.tenantId,
+        },
+        repositoryIdentity: githubContext.repositoryIdentity,
+        refOrPullRequestIdentity: githubContext.refOrPullRequestIdentity,
+        actorIdentity: githubContext.actorIdentity,
+        commandCategory: routed.command,
+        iacTool: routed.iacTool,
+        environment: inputs.targetEnvironment,
+        requestedAuthority: inputs.requestedAuthority,
+        runtimeMode: inputs.mode,
+        normalizedChangeSummary: redacted,
+        redactionReport: report,
+        artifactFingerprints: buildArtifactFingerprints(routed),
+    };
+    const envelopeId = (0, sign_1.buildUnsignedEnvelopeId)(unsignedBody);
+    const unsigned = {
+        ...unsignedBody,
+        envelopeId,
+    };
+    return (0, sign_1.signEnvelope)(unsigned, inputs.signingSecret, options.signedAt);
+}
+
+
+/***/ }),
+
+/***/ 4440:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.fingerprintPayload = fingerprintPayload;
+exports.fingerprintSigningKeyMaterial = fingerprintSigningKeyMaterial;
+const node_crypto_1 = __nccwpck_require__(7598);
+const serialize_1 = __nccwpck_require__(970);
+function fingerprintPayload(value) {
+    return (0, node_crypto_1.createHash)("sha256").update((0, serialize_1.canonicalizeJson)(value)).digest("hex");
+}
+function fingerprintSigningKeyMaterial(signingSecret) {
+    return (0, node_crypto_1.createHash)("sha256").update(signingSecret, "utf8").digest("hex").slice(0, 16);
+}
+
+
+/***/ }),
+
+/***/ 4347:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.readGitHubWorkflowContext = readGitHubWorkflowContext;
+const node_crypto_1 = __nccwpck_require__(7598);
+function readEnv(name, fallback) {
+    const value = process.env[name]?.trim();
+    if (value) {
+        return value;
+    }
+    if (fallback !== undefined) {
+        return fallback;
+    }
+    return "";
+}
+function parsePullRequestNumber() {
+    const eventPath = process.env.GITHUB_EVENT_PATH?.trim();
+    if (!eventPath) {
+        const fromEnv = readEnv("GITHUB_EVENT_PULL_REQUEST_NUMBER");
+        if (fromEnv) {
+            const parsed = Number.parseInt(fromEnv, 10);
+            return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
+    }
+    return undefined;
+}
+function readGitHubWorkflowContext() {
+    const owner = readEnv("GITHUB_REPOSITORY_OWNER", "local-owner");
+    const name = readEnv("GITHUB_REPOSITORY", `${owner}/local-repo`).split("/").pop() || "local-repo";
+    const fullName = readEnv("GITHUB_REPOSITORY", `${owner}/${name}`);
+    const correlationId = readEnv("GITHUB_RUN_ID") && readEnv("GITHUB_RUN_ATTEMPT")
+        ? `${readEnv("GITHUB_RUN_ID")}:${readEnv("GITHUB_RUN_ATTEMPT")}`
+        : (0, node_crypto_1.randomUUID)();
+    return {
+        correlationId,
+        providerContext: {
+            provider: "github",
+            eventName: readEnv("GITHUB_EVENT_NAME", "workflow_dispatch") || undefined,
+            apiUrl: readEnv("GITHUB_API_URL", "https://api.github.com") || undefined,
+        },
+        runIdentity: {
+            runId: readEnv("GITHUB_RUN_ID", "0"),
+            runAttempt: readEnv("GITHUB_RUN_ATTEMPT", "1"),
+            workflow: readEnv("GITHUB_WORKFLOW", "local-workflow"),
+            job: readEnv("GITHUB_JOB", "local-job"),
+        },
+        repositoryIdentity: {
+            owner,
+            name,
+            fullName,
+        },
+        refOrPullRequestIdentity: {
+            ref: readEnv("GITHUB_REF", "refs/heads/main"),
+            sha: readEnv("GITHUB_SHA", "0000000000000000000000000000000000000000"),
+            pullRequestNumber: parsePullRequestNumber(),
+        },
+        actorIdentity: {
+            login: readEnv("GITHUB_ACTOR", "local-actor"),
+            actorType: readEnv("GITHUB_ACTOR", "local-actor").endsWith("[bot]") ? "Bot" : "User",
+        },
+    };
+}
+
+
+/***/ }),
+
+/***/ 6755:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.redactValue = redactValue;
+exports.redactPayload = redactPayload;
+exports.containsRawSecretMarkers = containsRawSecretMarkers;
+const DEFAULT_REDACTION_PATTERNS = [
+    {
+        valueClass: "AWS_ACCESS_KEY",
+        marker: "[REDACTED:AWS_ACCESS_KEY]",
+        pattern: /AKIA[0-9A-Z]{16}/g,
+    },
+    {
+        valueClass: "AWS_SECRET_KEY",
+        marker: "[REDACTED:AWS_SECRET_KEY]",
+        pattern: /(?:aws_secret_access_key|secret_key)["'\s:=]+[A-Za-z0-9/+=]{20,}/gi,
+    },
+    {
+        valueClass: "PRIVATE_KEY",
+        marker: "[REDACTED:PRIVATE_KEY]",
+        pattern: /-----BEGIN [A-Z ]+ KEY-----[\s\S]*?-----END [A-Z ]+ KEY-----/g,
+    },
+    {
+        valueClass: "GITHUB_TOKEN",
+        marker: "[REDACTED:GITHUB_TOKEN]",
+        pattern: /(?:ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,})/g,
+    },
+    {
+        valueClass: "GENERIC_SECRET",
+        marker: "[REDACTED:GENERIC_SECRET]",
+        pattern: /(?:password|secret|token|api[_-]?key)["'\s:=]+["']?[^\s"',}{]+/gi,
+    },
+];
+function compileAdditionalPatterns(patterns) {
+    return patterns.map((source, index) => ({
+        valueClass: `CUSTOM_${index + 1}`,
+        marker: `[REDACTED:CUSTOM_${index + 1}]`,
+        pattern: new RegExp(source, "g"),
+    }));
+}
+function redactString(value, patterns) {
+    let redacted = value;
+    const markers = new Map();
+    for (const pattern of patterns) {
+        const matches = redacted.match(pattern.pattern);
+        if (!matches || matches.length === 0) {
+            continue;
+        }
+        redacted = redacted.replace(pattern.pattern, pattern.marker);
+        const existing = markers.get(pattern.marker);
+        if (existing) {
+            existing.count += matches.length;
+        }
+        else {
+            markers.set(pattern.marker, {
+                marker: pattern.marker,
+                valueClass: pattern.valueClass,
+                count: matches.length,
+            });
+        }
+    }
+    return { redacted, markers };
+}
+function mergeMarkers(target, source) {
+    for (const [marker, entry] of source) {
+        const existing = target.get(marker);
+        if (existing) {
+            existing.count += entry.count;
+        }
+        else {
+            target.set(marker, { ...entry });
+        }
+    }
+}
+function redactValue(value, patterns) {
+    if (typeof value === "string") {
+        const result = redactString(value, patterns);
+        return { redacted: result.redacted, markers: result.markers };
+    }
+    if (Array.isArray(value)) {
+        const markers = new Map();
+        const redacted = value.map((item) => {
+            const result = redactValue(item, patterns);
+            mergeMarkers(markers, result.markers);
+            return result.redacted;
+        });
+        return { redacted, markers };
+    }
+    if (value !== null && typeof value === "object") {
+        const markers = new Map();
+        const redacted = {};
+        for (const [key, nested] of Object.entries(value)) {
+            const result = redactValue(nested, patterns);
+            mergeMarkers(markers, result.markers);
+            redacted[key] = result.redacted;
+        }
+        return { redacted, markers };
+    }
+    return { redacted: value, markers: new Map() };
+}
+function redactPayload(value, profile, additionalPatterns = []) {
+    const patterns = [
+        ...DEFAULT_REDACTION_PATTERNS,
+        ...compileAdditionalPatterns(additionalPatterns),
+    ];
+    const result = redactValue(value, patterns);
+    const markers = [...result.markers.values()].sort((left, right) => left.marker.localeCompare(right.marker));
+    const totalRedactions = markers.reduce((sum, marker) => sum + marker.count, 0);
+    return {
+        redacted: result.redacted,
+        report: {
+            profile,
+            markers,
+            totalRedactions,
+        },
+    };
+}
+function containsRawSecretMarkers(value, patterns = []) {
+    const serialized = JSON.stringify(value);
+    const allPatterns = [
+        ...DEFAULT_REDACTION_PATTERNS,
+        ...compileAdditionalPatterns(patterns),
+    ];
+    return allPatterns.some((pattern) => {
+        pattern.pattern.lastIndex = 0;
+        return pattern.pattern.test(serialized);
+    });
+}
+
+
+/***/ }),
+
+/***/ 970:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.sortKeys = sortKeys;
+exports.canonicalizeJson = canonicalizeJson;
+function sortKeys(value) {
+    if (Array.isArray(value)) {
+        return value.map(sortKeys);
+    }
+    if (value !== null && typeof value === "object") {
+        const record = value;
+        const sorted = {};
+        for (const key of Object.keys(record).sort()) {
+            sorted[key] = sortKeys(record[key]);
+        }
+        return sorted;
+    }
+    return value;
+}
+function canonicalizeJson(value) {
+    return JSON.stringify(sortKeys(value));
+}
+
+
+/***/ }),
+
+/***/ 9515:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.signEnvelope = signEnvelope;
+exports.buildUnsignedEnvelopeId = buildUnsignedEnvelopeId;
+exports.verifyEnvelopeSignature = verifyEnvelopeSignature;
+const node_crypto_1 = __nccwpck_require__(7598);
+const fingerprint_1 = __nccwpck_require__(4440);
+const serialize_1 = __nccwpck_require__(970);
+function signEnvelope(envelope, signingSecret, signedAt = new Date().toISOString()) {
+    const payload = (0, serialize_1.canonicalizeJson)(envelope);
+    const signature = (0, node_crypto_1.createHmac)("sha256", signingSecret).update(payload).digest("hex");
+    const metadata = {
+        algorithm: "hmac-sha256",
+        keyId: (0, fingerprint_1.fingerprintSigningKeyMaterial)(signingSecret),
+        signature,
+        signedAt,
+    };
+    return {
+        ...envelope,
+        signature: metadata,
+    };
+}
+function buildUnsignedEnvelopeId(envelope) {
+    return (0, fingerprint_1.fingerprintPayload)(envelope);
+}
+function verifyEnvelopeSignature(envelope, signingSecret) {
+    const { signature, ...unsigned } = envelope;
+    void signature;
+    const expected = (0, node_crypto_1.createHmac)("sha256", signingSecret)
+        .update((0, serialize_1.canonicalizeJson)(unsigned))
+        .digest("hex");
+    return expected === envelope.signature.signature;
+}
+
+
+/***/ }),
+
+/***/ 344:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.buildNormalizedChangeSummary = buildNormalizedChangeSummary;
+const node_fs_1 = __nccwpck_require__(3024);
+const node_path_1 = __importDefault(__nccwpck_require__(6760));
+function countResourceActions(plan) {
+    const counts = {};
+    for (const change of plan.resource_changes ?? []) {
+        for (const action of change.change?.actions ?? []) {
+            counts[action] = (counts[action] ?? 0) + 1;
+        }
+    }
+    return counts;
+}
+function summarizeTerraformPlan(resolvedArtifactPaths) {
+    const planPath = resolvedArtifactPaths[0];
+    const parsed = JSON.parse((0, node_fs_1.readFileSync)(planPath, "utf8"));
+    const resourceActionCounts = countResourceActions(parsed);
+    const resourceAddresses = (parsed.resource_changes ?? [])
+        .map((change) => change.address)
+        .filter((address) => Boolean(address))
+        .sort();
+    const providerHints = [
+        ...new Set((parsed.resource_changes ?? [])
+            .map((change) => change.provider_name)
+            .filter((provider) => Boolean(provider))),
+    ].sort();
+    return {
+        summaryKind: "terraform-plan",
+        commandCategory: "plan",
+        iacTool: "terraform",
+        artifactCount: resolvedArtifactPaths.length,
+        resourceActionCounts,
+        resourceAddresses,
+        providerHints,
+        details: {
+            planFingerprintInput: node_path_1.default.basename(planPath),
+        },
+    };
+}
+function summarizeTemplateArtifacts(inputs, routed) {
+    return {
+        summaryKind: "template",
+        commandCategory: routed.command,
+        iacTool: routed.iacTool,
+        artifactCount: routed.resolvedArtifactPaths.length,
+        details: {
+            artifactPaths: routed.artifactPaths,
+            workingDirectory: inputs.workingDirectory,
+        },
+    };
+}
+function summarizeGeneric(inputs, routed) {
+    return {
+        summaryKind: "generic",
+        commandCategory: routed.command,
+        iacTool: routed.iacTool,
+        artifactCount: routed.resolvedArtifactPaths.length,
+        details: {
+            artifactPaths: routed.artifactPaths,
+            workingDirectory: inputs.workingDirectory,
+        },
+    };
+}
+function buildNormalizedChangeSummary(inputs, routed) {
+    if ((inputs.iacTool === "terraform" || inputs.iacTool === "opentofu") &&
+        (routed.command === "plan" || routed.command === "deploy-verification")) {
+        const summary = summarizeTerraformPlan(routed.resolvedArtifactPaths);
+        return {
+            ...summary,
+            iacTool: inputs.iacTool,
+            commandCategory: routed.command,
+        };
+    }
+    if (inputs.iacTool === "cdk" || inputs.iacTool === "cloudformation") {
+        return summarizeTemplateArtifacts(inputs, routed);
+    }
+    return summarizeGeneric(inputs, routed);
+}
+
+
+/***/ }),
+
+/***/ 7125:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ENVELOPE_SCHEMA_VERSION = void 0;
+exports.ENVELOPE_SCHEMA_VERSION = "control9.action-envelope.v0";
+
+
+/***/ }),
+
 /***/ 9407:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -25684,23 +26136,29 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.runAction = runAction;
 const core = __importStar(__nccwpck_require__(7484));
+const build_1 = __nccwpck_require__(1252);
 const inputs_1 = __nccwpck_require__(8422);
 const outputs_1 = __nccwpck_require__(7729);
+const client_1 = __nccwpck_require__(867);
 const routing_1 = __nccwpck_require__(6357);
 const types_1 = __nccwpck_require__(8522);
 async function runAction() {
     const inputs = (0, inputs_1.readActionInputsFromEnv)();
     const routed = (0, routing_1.routeCommand)(inputs);
     const artifactFingerprint = (0, routing_1.fingerprintArtifacts)(routed.resolvedArtifactPaths);
-    const summary = (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint);
+    const envelope = (0, build_1.buildSignedActionEnvelope)(inputs, routed);
+    const policyClient = (0, client_1.createPolicyClient)({ apiBaseUrl: inputs.control9ApiUrl });
+    const decision = await policyClient.submitEnvelope({ envelope });
+    const summary = (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, decision);
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
-    const result = (0, outputs_1.buildBootstrapResult)(summaryPath, artifactFingerprint, inputs.mode);
+    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, decision);
     core.setOutput("envelope-id", result.envelopeId);
     core.setOutput("artifact-fingerprint", result.artifactFingerprint);
     core.setOutput("decision-id", result.decisionId);
     core.setOutput("decision-kind", result.decisionKind);
     core.setOutput("summary-path", result.summaryPath);
-    core.info(`Control9 validated ${inputs.iacTool} ${inputs.command} artifacts in ${inputs.mode} mode.`);
+    core.info(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${result.envelopeId} in ${inputs.mode} mode.`);
+    core.info(`Decision ${result.decisionKind}: ${summary.decisionReason}`);
     core.info(`Summary written to ${summaryPath}.`);
 }
 async function main() {
@@ -25832,10 +26290,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildValidationSummary = buildValidationSummary;
 exports.writeSummaryFile = writeSummaryFile;
-exports.buildBootstrapResult = buildBootstrapResult;
+exports.buildActionResult = buildActionResult;
 const node_fs_1 = __nccwpck_require__(3024);
 const node_path_1 = __importDefault(__nccwpck_require__(6760));
-function buildValidationSummary(inputs, routed, artifactFingerprint) {
+function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, decision) {
     return {
         mode: inputs.mode,
         tenantId: inputs.tenantId,
@@ -25846,8 +26304,14 @@ function buildValidationSummary(inputs, routed, artifactFingerprint) {
         artifactFingerprint,
         artifactPaths: routed.artifactPaths,
         redactionProfile: inputs.redactionProfile ?? "standard",
-        status: "validated",
-        message: "Inputs validated and artifacts routed locally. Envelope construction and policy submission are implemented in later milestones.",
+        envelopeId: envelope.envelopeId,
+        correlationId: envelope.correlationId,
+        decisionId: decision.decisionId,
+        decisionKind: decision.decisionKind,
+        decisionReason: decision.reason,
+        redactionCount: envelope.redactionReport.totalRedactions,
+        status: "submitted",
+        message: decision.reason,
     };
 }
 function writeSummaryFile(summary) {
@@ -25858,13 +26322,150 @@ function writeSummaryFile(summary) {
     (0, node_fs_1.writeFileSync)(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
     return summaryPath;
 }
-function buildBootstrapResult(summaryPath, artifactFingerprint, mode) {
+function buildActionResult(summaryPath, artifactFingerprint, envelope, decision) {
     return {
-        envelopeId: "",
+        envelopeId: envelope.envelopeId,
         artifactFingerprint,
-        decisionId: "",
-        decisionKind: mode === "shadow" ? "observe" : "pending",
+        decisionId: decision.decisionId,
+        decisionKind: decision.decisionKind,
         summaryPath,
+    };
+}
+
+
+/***/ }),
+
+/***/ 867:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Control9PolicyClient = void 0;
+exports.createPolicyClient = createPolicyClient;
+const types_1 = __nccwpck_require__(8522);
+const normalize_1 = __nccwpck_require__(2425);
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+function isRetryableStatus(status) {
+    return RETRYABLE_STATUS_CODES.has(status);
+}
+function buildSubmissionUrl(apiBaseUrl) {
+    return `${apiBaseUrl.replace(/\/$/, "")}/v1/action-envelopes`;
+}
+class Control9PolicyClient {
+    apiBaseUrl;
+    maxAttempts;
+    initialBackoffMs;
+    fetchImpl;
+    constructor(options) {
+        this.apiBaseUrl = options.apiBaseUrl;
+        this.maxAttempts = options.maxAttempts ?? 3;
+        this.initialBackoffMs = options.initialBackoffMs ?? 100;
+        this.fetchImpl = options.fetchImpl ?? fetch;
+    }
+    async submitEnvelope(request) {
+        const url = buildSubmissionUrl(this.apiBaseUrl);
+        let lastError;
+        for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+            try {
+                const response = await this.fetchImpl(url, {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        accept: "application/json",
+                        ...(request.apiToken ? { authorization: `Bearer ${request.apiToken}` } : {}),
+                    },
+                    body: JSON.stringify(request.envelope),
+                });
+                if (!response.ok) {
+                    if (isRetryableStatus(response.status) && attempt < this.maxAttempts) {
+                        await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
+                        continue;
+                    }
+                    throw new types_1.Control9ActionError(`Control9 policy API returned HTTP ${response.status} for envelope submission.`);
+                }
+                const payload = (await response.json());
+                return (0, normalize_1.normalizePolicyDecision)(payload);
+            }
+            catch (error) {
+                if (error instanceof types_1.Control9ActionError) {
+                    throw error;
+                }
+                lastError = error instanceof Error ? error : new Error(String(error));
+                if (attempt < this.maxAttempts) {
+                    await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
+                    continue;
+                }
+            }
+        }
+        throw new types_1.Control9ActionError(`Control9 policy API submission failed after ${this.maxAttempts} attempts: ${lastError?.message ?? "unknown error"}.`);
+    }
+}
+exports.Control9PolicyClient = Control9PolicyClient;
+function createPolicyClient(options) {
+    return new Control9PolicyClient(options);
+}
+
+
+/***/ }),
+
+/***/ 2425:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizePolicyDecision = normalizePolicyDecision;
+const types_1 = __nccwpck_require__(8522);
+const ALLOWED_DECISION_KINDS = new Set([
+    "allow",
+    "deny",
+    "require_approval",
+    "observe",
+]);
+function readStringField(response, camelCase, snakeCase) {
+    const camelValue = response[camelCase];
+    if (typeof camelValue === "string" && camelValue.trim()) {
+        return camelValue.trim();
+    }
+    const snakeValue = response[snakeCase];
+    if (typeof snakeValue === "string" && snakeValue.trim()) {
+        return snakeValue.trim();
+    }
+    return undefined;
+}
+function normalizePolicyDecision(response) {
+    const decisionId = readStringField(response, "decisionId", "decision_id");
+    const decisionKindRaw = readStringField(response, "decisionKind", "decision_kind");
+    const reason = readStringField(response, "reason", "reason");
+    if (!decisionId) {
+        throw new types_1.Control9ActionError("Control9 policy response is missing decision id.");
+    }
+    if (!decisionKindRaw) {
+        throw new types_1.Control9ActionError("Control9 policy response is missing decision kind.");
+    }
+    const normalizedKind = decisionKindRaw.toLowerCase().replace(/-/g, "_");
+    if (!ALLOWED_DECISION_KINDS.has(normalizedKind)) {
+        throw new types_1.Control9ActionError(`Unsupported Control9 decision kind "${decisionKindRaw}".`);
+    }
+    if (!reason) {
+        throw new types_1.Control9ActionError("Control9 policy response is missing reason text.");
+    }
+    const riskSummary = readStringField(response, "riskSummary", "risk_summary");
+    const policyVersion = readStringField(response, "policyVersion", "policy_version");
+    const followUp = response.followUp ?? response.follow_up;
+    return {
+        decisionId,
+        decisionKind: normalizedKind,
+        reason,
+        riskSummary,
+        policyVersion,
+        followUp,
     };
 }
 

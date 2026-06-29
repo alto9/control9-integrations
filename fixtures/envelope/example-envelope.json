@@ -1,4 +1,72 @@
 {
   "schemaVersion": "control9.action-envelope.v0",
-  "description": "Placeholder fixture for canonical envelope schema work tracked in issue #11."
+  "envelopeId": "example-envelope-id-replaced-by-buildSignedActionEnvelope-tests",
+  "correlationId": "123:1",
+  "providerContext": {
+    "provider": "github",
+    "eventName": "workflow_dispatch",
+    "apiUrl": "https://api.github.com"
+  },
+  "runIdentity": {
+    "runId": "123",
+    "runAttempt": "1",
+    "workflow": "control9",
+    "job": "evaluate"
+  },
+  "tenantIdentity": {
+    "tenantId": "tenant-123"
+  },
+  "repositoryIdentity": {
+    "owner": "acme",
+    "name": "infra",
+    "fullName": "acme/infra"
+  },
+  "refOrPullRequestIdentity": {
+    "ref": "refs/heads/main",
+    "sha": "abc123"
+  },
+  "actorIdentity": {
+    "login": "dev",
+    "actorType": "User"
+  },
+  "commandCategory": "plan",
+  "iacTool": "terraform",
+  "environment": "staging",
+  "requestedAuthority": "plan",
+  "runtimeMode": "shadow",
+  "normalizedChangeSummary": {
+    "summaryKind": "terraform-plan",
+    "commandCategory": "plan",
+    "iacTool": "terraform",
+    "artifactCount": 1,
+    "resourceActionCounts": {
+      "create": 1
+    },
+    "resourceAddresses": [
+      "aws_s3_bucket.example"
+    ],
+    "providerHints": [
+      "registry.terraform.io/hashicorp/aws"
+    ],
+    "details": {
+      "planFingerprintInput": "plan.json"
+    }
+  },
+  "redactionReport": {
+    "profile": "standard",
+    "markers": [],
+    "totalRedactions": 0
+  },
+  "artifactFingerprints": [
+    {
+      "path": "fixtures/terraform/plan.json",
+      "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "signature": {
+    "algorithm": "hmac-sha256",
+    "keyId": "0000000000000000",
+    "signature": "0000000000000000000000000000000000000000000000000000000000000000",
+    "signedAt": "2026-06-29T00:00:00.000Z"
+  }
 }

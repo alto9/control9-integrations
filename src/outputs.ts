@@ -1,12 +1,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import type { ActionEnvelope, PolicyDecision } from "./envelope/types";
 import type { ActionInputs, ActionResult, RoutedCommand, ValidationSummary } from "./types";
 
 export function buildValidationSummary(
   inputs: ActionInputs,
   routed: RoutedCommand,
   artifactFingerprint: string,
+  envelope: ActionEnvelope,
+  decision: PolicyDecision,
 ): ValidationSummary {
   return {
     mode: inputs.mode,
@@ -18,9 +21,14 @@ export function buildValidationSummary(
     artifactFingerprint,
     artifactPaths: routed.artifactPaths,
     redactionProfile: inputs.redactionProfile ?? "standard",
-    status: "validated",
-    message:
-      "Inputs validated and artifacts routed locally. Envelope construction and policy submission are implemented in later milestones.",
+    envelopeId: envelope.envelopeId,
+    correlationId: envelope.correlationId,
+    decisionId: decision.decisionId,
+    decisionKind: decision.decisionKind,
+    decisionReason: decision.reason,
+    redactionCount: envelope.redactionReport.totalRedactions,
+    status: "submitted",
+    message: decision.reason,
   };
 }
 
@@ -35,16 +43,17 @@ export function writeSummaryFile(summary: ValidationSummary): string {
   return summaryPath;
 }
 
-export function buildBootstrapResult(
+export function buildActionResult(
   summaryPath: string,
   artifactFingerprint: string,
-  mode: ActionInputs["mode"],
+  envelope: ActionEnvelope,
+  decision: PolicyDecision,
 ): ActionResult {
   return {
-    envelopeId: "",
+    envelopeId: envelope.envelopeId,
     artifactFingerprint,
-    decisionId: "",
-    decisionKind: mode === "shadow" ? "observe" : "pending",
+    decisionId: decision.decisionId,
+    decisionKind: decision.decisionKind,
     summaryPath,
   };
 }

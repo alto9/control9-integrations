@@ -38,7 +38,13 @@ export interface ValidationSummary {
   artifactFingerprint: string;
   artifactPaths: string[];
   redactionProfile: string;
-  status: "validated";
+  envelopeId: string;
+  correlationId: string;
+  decisionId: string;
+  decisionKind: DecisionKind;
+  decisionReason: string;
+  redactionCount: number;
+  status: "submitted";
   message: string;
 }
 
