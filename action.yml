@@ -57,6 +57,10 @@ outputs:
     description: Normalized decision kind (allow, deny, require_approval, or observe).
   summary-path:
     description: Path to the local summary JSON written for workflow rendering.
+  summary-written:
+    description: Whether the GitHub workflow step summary received the Control9 decision section.
+  pr-comment-state:
+    description: Pull request comment publish state when PR comment rendering is enabled.
 
 runs:
   using: node20
