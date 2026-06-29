@@ -1,0 +1,21 @@
+{
+  "decisionId": "dec-observe-1",
+  "decisionKind": "observe",
+  "reason": "Public S3 bucket change detected.",
+  "riskSummary": "Bucket policy may expose objects publicly.",
+  "policyVersion": "2026.06.1",
+  "artifactFingerprint": "fp-observe-001",
+  "targetEnvironment": "production",
+  "runtimeMode": "shadow",
+  "redactionReport": {
+    "profile": "default",
+    "totalRedactions": 1,
+    "markers": [
+      {
+        "marker": "[REDACTED:secret]",
+        "valueClass": "secret",
+        "count": 1
+      }
+    ]
+  }
+}
