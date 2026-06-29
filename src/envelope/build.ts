@@ -1,11 +1,13 @@
 import type { ActionInputs, RoutedCommand } from "../types";
+import { Control9ActionError } from "../types";
 import { fingerprintArtifacts } from "../routing";
 import { readGitHubWorkflowContext } from "./github-context";
 import { buildUnsignedEnvelopeId, signEnvelope } from "./sign";
-import { redactPayload } from "./redact";
+import { containsRawSecretMarkers, redactPayload } from "./redact";
 import { buildNormalizedChangeSummary } from "./summary";
 import type { ActionEnvelope, ArtifactFingerprintEntry } from "./types";
 import { ENVELOPE_SCHEMA_VERSION } from "./types";
+import { validateActionEnvelopeSchema } from "./validate-schema";
 
 export interface BuildEnvelopeOptions {
   signedAt?: string;
@@ -32,6 +34,12 @@ export function buildSignedActionEnvelope(
     redactionProfile,
     inputs.redactionAdditionalPatterns,
   );
+
+  if (containsRawSecretMarkers(redacted, inputs.redactionAdditionalPatterns)) {
+    throw new Control9ActionError(
+      "Redaction failed: normalized change summary still contains sensitive values matching the active redaction profile.",
+    );
+  }
 
   const unsignedBody = {
     schemaVersion: ENVELOPE_SCHEMA_VERSION,
@@ -60,5 +68,7 @@ export function buildSignedActionEnvelope(
     envelopeId,
   };
 
-  return signEnvelope(unsigned, inputs.signingSecret, options.signedAt);
+  const signed = signEnvelope(unsigned, inputs.signingSecret, options.signedAt);
+  validateActionEnvelopeSchema(signed);
+  return signed;
 }

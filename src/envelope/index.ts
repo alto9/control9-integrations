@@ -5,6 +5,7 @@ export { redactPayload, containsRawSecretMarkers } from "./redact";
 export { canonicalizeJson, sortKeys } from "./serialize";
 export { buildUnsignedEnvelopeId, signEnvelope, verifyEnvelopeSignature } from "./sign";
 export { buildNormalizedChangeSummary } from "./summary";
+export { validateActionEnvelopeSchema } from "./validate-schema";
 export {
   ENVELOPE_SCHEMA_VERSION,
   type ActionEnvelope,

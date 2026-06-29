@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { parseActionInputs } from "../src/inputs";
 import { buildSignedActionEnvelope } from "../src/envelope/build";
+import * as redactModule from "../src/envelope/redact";
 import { containsRawSecretMarkers } from "../src/envelope/redact";
 import { verifyEnvelopeSignature } from "../src/envelope/sign";
+import { validateActionEnvelopeSchema } from "../src/envelope/validate-schema";
 import { routeCommand } from "../src/routing";
+import { Control9ActionError } from "../src/types";
 import type { GitHubWorkflowContext } from "../src/envelope/types";
 
 const githubContext: GitHubWorkflowContext = {
@@ -64,5 +67,63 @@ describe("buildSignedActionEnvelope", () => {
     expect(verifyEnvelopeSignature(envelope, "test-signing-secret")).toBe(true);
     expect(containsRawSecretMarkers(envelope)).toBe(false);
     expect(JSON.stringify(envelope)).not.toContain("test-signing-secret");
+  });
+
+  it("fails when redacted summary still contains raw secret markers", () => {
+    const inputs = parseActionInputs({
+      mode: "shadow",
+      control9ApiUrl: "https://api.control9.example",
+      tenantId: "tenant-123",
+      signingSecret: "test-signing-secret",
+      targetEnvironment: "staging",
+      requestedAuthority: "plan",
+      iacTool: "terraform",
+      command: "plan",
+      artifactPaths: "fixtures/terraform/plan.json",
+      workingDirectory: ".",
+    });
+    const routed = routeCommand(inputs);
+    const spy = vi
+      .spyOn(redactModule, "containsRawSecretMarkers")
+      .mockReturnValue(true);
+
+    expect(() =>
+      buildSignedActionEnvelope(inputs, routed, {
+        githubContext,
+        signedAt: "2026-06-29T00:00:00.000Z",
+      }),
+    ).toThrow(Control9ActionError);
+
+    spy.mockRestore();
+  });
+
+  it("validates the signed envelope against the action-envelope schema", () => {
+    const inputs = parseActionInputs({
+      mode: "shadow",
+      control9ApiUrl: "https://api.control9.example",
+      tenantId: "tenant-123",
+      signingSecret: "test-signing-secret",
+      targetEnvironment: "staging",
+      requestedAuthority: "plan",
+      iacTool: "terraform",
+      command: "plan",
+      artifactPaths: "fixtures/terraform/plan.json",
+      workingDirectory: ".",
+    });
+    const routed = routeCommand(inputs);
+    const envelope = buildSignedActionEnvelope(inputs, routed, {
+      githubContext,
+      signedAt: "2026-06-29T00:00:00.000Z",
+    });
+
+    expect(() => validateActionEnvelopeSchema(envelope)).not.toThrow();
+  });
+
+  it("rejects envelopes that violate the action-envelope schema", () => {
+    expect(() =>
+      validateActionEnvelopeSchema({
+        schemaVersion: "control9.action-envelope.v0",
+      } as never),
+    ).toThrow(Control9ActionError);
   });
 });

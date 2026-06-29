@@ -77,7 +77,7 @@ Customer repositories should be able to configure:
 
 ## GitHub Action (Shadow Mode)
 
-The first shipped action validates IaC artifacts locally, fingerprints them, and writes a summary file without blocking deploys. Envelope signing and policy submission arrive in later milestones.
+The first shipped action validates IaC artifacts locally, builds a redacted and signed action envelope, submits it to the Control9 policy API, fingerprints artifacts, and writes a summary file without blocking deploys in shadow mode.
 
 ```yaml
 name: Control9 shadow assessment
