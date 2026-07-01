@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "package:release": "npm run build && bash scripts/package-release-bundle.sh",
     "prepare": "npm run build"
   },
   "engines": {

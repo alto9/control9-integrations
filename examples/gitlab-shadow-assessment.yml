@@ -1,0 +1,43 @@
+# Example GitLab pipeline: Terraform plan followed by Control9 shadow assessment.
+#
+# Prerequisites (CI/CD variables in your GitLab project or group):
+#   CONTROL9_API_URL       — Control9 policy API base URL
+#   CONTROL9_TENANT_ID     — Tenant or installation identity from Control9 onboarding
+#   CONTROL9_SIGNING_SECRET — Masked, protected signing secret
+#
+# Pin both the remote include ref and control9-version to the same reviewed semver tag.
+
+stages:
+  - plan
+  - assess
+
+include:
+  - remote: "https://raw.githubusercontent.com/alto9/control9-integrations/v0.1.0/templates/control9-assessment/template.yml"
+    inputs:
+      mode: shadow
+      control9-api-url: $CONTROL9_API_URL
+      tenant-id: $CONTROL9_TENANT_ID
+      signing-secret: $CONTROL9_SIGNING_SECRET
+      target-environment: staging
+      requested-authority: plan
+      iac-tool: terraform
+      command: plan
+      artifact-paths: infra/plan.json
+      working-directory: "."
+      control9-version: v0.1.0
+      stage: assess
+
+terraform-plan:
+  stage: plan
+  image:
+    name: hashicorp/terraform:1.9
+    entrypoint: [""]
+  script:
+    - cd infra
+    - terraform init -backend=false
+    - terraform plan -out=tfplan
+    - terraform show -json tfplan > plan.json
+  artifacts:
+    paths:
+      - infra/plan.json
+    expire_in: 1 day

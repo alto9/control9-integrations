@@ -1,0 +1,74 @@
+spec:
+  inputs:
+    mode:
+      default: shadow
+      description: Runtime mode. Shadow mode reports findings without blocking deploys.
+    control9-api-url:
+      description: Control9 policy API base URL.
+    tenant-id:
+      description: Control9 tenant or installation identity.
+    signing-secret:
+      description: Masked CI/CD variable used to sign action envelopes before submission.
+    target-environment:
+      description: Governed environment key for this change (for example staging or production).
+    requested-authority:
+      description: Deploy or change authority requested by this job.
+    iac-tool:
+      description: IaC tool that produced the artifacts (terraform, opentofu, cdk, or cloudformation).
+    command:
+      description: Command category for the supplied artifacts (plan, synth, diff, or deploy-verification).
+    artifact-paths:
+      description: Comma-separated repository-relative paths to plan JSON, synthesized templates, or diff artifacts.
+    working-directory:
+      default: "."
+      description: Repository-relative directory containing artifact paths.
+    redaction-profile:
+      default: standard
+      description: Redaction profile name applied before envelope signing.
+    redaction-additional-patterns:
+      default: ""
+      description: Optional comma-separated extra redaction patterns applied before envelope construction.
+    fail-open-environments:
+      default: ""
+      description: Optional comma-separated target-environment keys that may continue when the Control9 API is unavailable in enforce mode.
+    control9-version:
+      default: v0
+      description: GitHub release tag used when downloading the Control9 Node bundle.
+    stage:
+      default: test
+      description: GitLab job stage for the Control9 assessment job.
+
+---
+control9-assessment:
+  stage: $[[ inputs.stage ]]
+  image: node:20-alpine
+  variables:
+    CONTROL9_PROVIDER: gitlab
+    INPUT_MODE: $[[ inputs.mode ]]
+    INPUT_CONTROL9_API_URL: $[[ inputs.control9-api-url ]]
+    INPUT_TENANT_ID: $[[ inputs.tenant-id ]]
+    INPUT_SIGNING_SECRET: $[[ inputs.signing-secret ]]
+    INPUT_TARGET_ENVIRONMENT: $[[ inputs.target-environment ]]
+    INPUT_REQUESTED_AUTHORITY: $[[ inputs.requested-authority ]]
+    INPUT_IAC_TOOL: $[[ inputs.iac-tool ]]
+    INPUT_COMMAND: $[[ inputs.command ]]
+    INPUT_ARTIFACT_PATHS: $[[ inputs.artifact-paths ]]
+    INPUT_WORKING_DIRECTORY: $[[ inputs.working-directory ]]
+    INPUT_REDACTION_PROFILE: $[[ inputs.redaction-profile ]]
+    INPUT_REDACTION_ADDITIONAL_PATTERNS: $[[ inputs.redaction-additional-patterns ]]
+    INPUT_FAIL_OPEN_ENVIRONMENTS: $[[ inputs.fail-open-environments ]]
+  before_script:
+    - apk add --no-cache curl tar
+    - mkdir -p .control9/bundle
+    - |
+      curl -fsSL \
+        "https://github.com/alto9/control9-integrations/releases/download/$[[ inputs.control9-version ]]/control9-bundle.tar.gz" \
+        -o .control9/bundle/control9-bundle.tar.gz
+    - tar -xzf .control9/bundle/control9-bundle.tar.gz -C .control9/bundle
+  script:
+    - node .control9/bundle/dist/gitlab/index.js
+  artifacts:
+    when: always
+    paths:
+      - .control9/output/control9-summary.json
+    expire_in: 30 days
