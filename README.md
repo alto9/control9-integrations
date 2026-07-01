@@ -57,14 +57,15 @@ Default payloads should contain structured metadata, plan or template summaries,
 
 ## Configuration Model
 
-Customer repositories should be able to configure:
+See **[Configuration and safe defaults](docs/configuration-and-safe-defaults.md)** for the customer-facing reference on action inputs, redaction, signing, summary-only evidence capture, and local output paths.
+
+At a high level, customer repositories configure:
 
 - Control9 API endpoint and tenant identity.
-- Shadow or enforce mode.
-- Target environment and protected deploy authority.
-- Tool paths for Terraform/OpenTofu, CDK, CloudFormation, and shell deploy steps.
-- Policy bundle or policy pack reference.
-- Redaction options and optional evidence capture settings.
+- Shadow or enforce mode (defaults to shadow).
+- Target environment and requested deploy authority.
+- IaC tool, command category, and artifact paths.
+- Optional redaction profile and additional patterns.
 
 ## Near-Term Build Priorities
 
