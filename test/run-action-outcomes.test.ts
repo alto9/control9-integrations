@@ -79,17 +79,20 @@ const unavailableFixture = JSON.parse(
   readFileSync("fixtures/outcomes/unavailable-api-exhaustion.json", "utf8"),
 ) as UnavailableOutcomeFixture;
 const verifiedFixture = JSON.parse(
-  readFileSync("fixtures/rendering/verified-response.json", "utf8"),
+  readFileSync("fixtures/verification/verified-response.json", "utf8"),
 ) as VerificationFixture;
 const fingerprintMismatchFixture = JSON.parse(
-  readFileSync("fixtures/rendering/fingerprint-mismatch-response.json", "utf8"),
+  readFileSync("fixtures/verification/fingerprint-mismatch-response.json", "utf8"),
 ) as VerificationFixture;
 const noApprovedBaselineFixture = JSON.parse(
-  readFileSync("fixtures/rendering/no-approved-baseline-response.json", "utf8"),
+  readFileSync("fixtures/verification/no-approved-baseline-response.json", "utf8"),
 ) as VerificationFixture;
 const malformedVerificationFixture = JSON.parse(
-  readFileSync("fixtures/outcomes/malformed-verification-response.json", "utf8"),
+  readFileSync("fixtures/verification/malformed-response.json", "utf8"),
 ) as MalformedVerificationFixture;
+const unavailableVerificationFixture = JSON.parse(
+  readFileSync("fixtures/verification/unavailable-api-exhaustion.json", "utf8"),
+) as UnavailableOutcomeFixture;
 
 const UNSAFE_PATTERNS = [
   /BEGIN RSA PRIVATE KEY/,
@@ -213,6 +216,29 @@ describe("runAction outcome integration", () => {
         status: malformedVerificationFixture.httpStatus,
       }),
     );
+  }
+
+  function mockUnavailableVerificationApiExhaustion(): void {
+    fetchMock.mockResolvedValue(
+      new Response("service unavailable", {
+        status: unavailableVerificationFixture.httpStatus,
+      }),
+    );
+  }
+
+  function expectDeployVerificationFeedback(
+    summaryContent: string,
+    verificationStatus: keyof typeof OUTCOME_TEMPLATES,
+  ): void {
+    expect(summaryContent).toContain(DEPLOY_VERIFICATION_SECTION_HEADING);
+    expect(summaryContent).not.toContain(SUMMARY_SECTION_HEADING);
+    expect(summaryContent).toContain(OUTCOME_TEMPLATES[verificationStatus].title);
+  }
+
+  function expectArtifactFingerprintOutput(): void {
+    const fingerprint = getOutput("artifact-fingerprint");
+    expect(fingerprint).toBeTruthy();
+    expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
   }
 
   async function expectRunCompletes(): Promise<void> {
@@ -434,12 +460,32 @@ describe("runAction outcome integration", () => {
         expect(getOutput("verification-status")).toBe(fixture.verificationStatus);
         expect(getOutput("verification-id")).toBe(fixture.verificationId);
         expect(getOutput("decision-kind")).toBe("");
+        expectArtifactFingerprintOutput();
 
         const summaryContent = readFileSync(stepSummaryPath, "utf8");
-        expect(summaryContent).toContain(DEPLOY_VERIFICATION_SECTION_HEADING);
-        expect(summaryContent).not.toContain(SUMMARY_SECTION_HEADING);
+        expectDeployVerificationFeedback(summaryContent, fixture.verificationStatus);
+        expect(coreMocks.notice.mock.calls.at(-1)?.[1]?.title).toBe(
+          OUTCOME_TEMPLATES[fixture.verificationStatus].label,
+        );
       },
     );
+
+    it("completes verified deploy verification in enforce mode with expected outputs and feedback", async () => {
+      process.env.INPUT_MODE = "enforce";
+      process.env.INPUT_TARGET_ENVIRONMENT = "production";
+      mockVerificationSuccess(verifiedFixture);
+
+      await expectRunCompletes();
+
+      expect(getOutput("verification-status")).toBe("verified");
+      expect(getOutput("verification-id")).toBe(verifiedFixture.verificationId);
+      expectArtifactFingerprintOutput();
+
+      const summaryContent = readFileSync(stepSummaryPath, "utf8");
+      expectDeployVerificationFeedback(summaryContent, "verified");
+      expect(coreMocks.notice).toHaveBeenCalled();
+      expect(coreMocks.warning).not.toHaveBeenCalled();
+    });
 
     it.each([
       ["fingerprint_mismatch", fingerprintMismatchFixture, /does not match the approved fingerprint/i],
@@ -454,8 +500,15 @@ describe("runAction outcome integration", () => {
         await expectRunBlocks(summaryPattern);
 
         expect(getOutput("verification-status")).toBe(fixture.verificationStatus);
+        expect(getOutput("verification-id")).toBe(fixture.verificationId);
         expect(getOutput("summary-written")).toBe("true");
-        expect(coreMocks.warning).toHaveBeenCalled();
+        expectArtifactFingerprintOutput();
+
+        const summaryContent = readFileSync(stepSummaryPath, "utf8");
+        expectDeployVerificationFeedback(summaryContent, fixture.verificationStatus);
+        expect(coreMocks.warning.mock.calls[0]?.[1]?.title).toBe(
+          OUTCOME_TEMPLATES[fixture.verificationStatus].label,
+        );
       },
     );
 
@@ -470,9 +523,55 @@ describe("runAction outcome integration", () => {
         await expectRunCompletes();
 
         expect(getOutput("verification-status")).toBe(fixture.verificationStatus);
+        expectArtifactFingerprintOutput();
+
+        const summaryContent = readFileSync(stepSummaryPath, "utf8");
+        expectDeployVerificationFeedback(summaryContent, fixture.verificationStatus);
+        expect(summaryContent).toMatch(/Shadow mode is active/i);
         expect(coreMocks.notice).toHaveBeenCalled();
         expect(coreMocks.warning).not.toHaveBeenCalled();
       }
+    });
+
+    it("continues in shadow mode when the verification API is unavailable after retries", async () => {
+      process.env.INPUT_MODE = "shadow";
+      mockUnavailableVerificationApiExhaustion();
+
+      await expectRunCompletes();
+
+      expect(fetchMock).toHaveBeenCalledTimes(unavailableVerificationFixture.attempts);
+      expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/v1/deploy-verifications");
+      expect(getOutput("verification-status")).toBe(
+        unavailableVerificationFixture.expectedFailureKind,
+      );
+      expect(getOutput("verification-id")).toBe("");
+      expectArtifactFingerprintOutput();
+
+      const summaryContent = readFileSync(stepSummaryPath, "utf8");
+      expectDeployVerificationFeedback(summaryContent, "unavailable_api");
+      expect(summaryContent).toMatch(/could not reach the policy API/i);
+      expect(summaryContent).toMatch(/Shadow mode is active/i);
+      expect(coreMocks.notice.mock.calls[0]?.[1]?.title).toBe(
+        OUTCOME_TEMPLATES.unavailable_api.label,
+      );
+    });
+
+    it("blocks enforce mode when the verification API is unavailable after retries", async () => {
+      process.env.INPUT_MODE = "enforce";
+      process.env.INPUT_TARGET_ENVIRONMENT = "production";
+      mockUnavailableVerificationApiExhaustion();
+
+      await expectRunBlocks(/could not reach the policy API/i);
+
+      expect(getOutput("verification-status")).toBe("unavailable_api");
+      expect(getOutput("verification-id")).toBe("");
+      expect(coreMocks.warning).toHaveBeenCalled();
+      expect(readFileSync(stepSummaryPath, "utf8")).toContain(
+        OUTCOME_TEMPLATES.unavailable_api.title,
+      );
+      expect(coreMocks.warning.mock.calls[0]?.[1]?.title).toBe(
+        OUTCOME_TEMPLATES.unavailable_api.label,
+      );
     });
 
     it.each(["shadow", "enforce"] as const)(
@@ -483,10 +582,20 @@ describe("runAction outcome integration", () => {
 
         await expectRunBlocks(/missing verification status/i);
 
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(getOutput("verification-status")).toBe(
           malformedVerificationFixture.expectedFailureKind,
         );
         expect(getOutput("verification-id")).toBe("");
+
+        const summaryContent = readFileSync(stepSummaryPath, "utf8");
+        expectDeployVerificationFeedback(summaryContent, "malformed_response");
+        expect(summaryContent).toMatch(
+          new RegExp(malformedVerificationFixture.expectedDetailPattern, "i"),
+        );
+        expect(coreMocks.warning.mock.calls[0]?.[1]?.title).toBe(
+          OUTCOME_TEMPLATES.malformed_response.label,
+        );
       },
     );
   });

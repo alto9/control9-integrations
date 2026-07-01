@@ -1,0 +1,7 @@
+{
+  "description": "Deploy verification response when no approved fingerprint exists for the governed change context.",
+  "verificationId": "verify-no-baseline-001",
+  "verificationStatus": "no_approved_baseline",
+  "reason": "No approved fingerprint exists for this repository and environment.",
+  "targetEnvironment": "production"
+}
