@@ -17,7 +17,10 @@ import { createPolicyClient } from "../policy/client";
 import { fingerprintArtifacts, routeCommand } from "../routing";
 import { Control9ActionError } from "../types";
 import { createVerificationClient } from "../verification/client";
-import { publishBaselineLogFeedback } from "./log-output";
+import {
+  publishGitLabJobFeedback,
+  writeGitLabPresentationOutputs,
+} from "./job-log";
 
 export const CONTROL9_PROVIDER_ENV = "CONTROL9_PROVIDER";
 
@@ -91,11 +94,12 @@ async function runPolicyFlow(options: {
     decisionId: submission.status === "success" ? submission.decision.decisionId : "",
   });
 
-  publishBaselineLogFeedback({
+  const feedback = publishGitLabJobFeedback({
     rendered: routedOutcome.rendered,
     summaryPath,
     presentation: "policy",
   });
+  writeGitLabPresentationOutputs(feedback);
 
   console.log(
     `Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${envelope.envelopeId} in ${inputs.mode} mode.`,
@@ -151,11 +155,12 @@ async function runDeployVerificationFlow(options: {
       submission.status === "success" ? (submission.verification.decisionId ?? "") : "",
   });
 
-  publishBaselineLogFeedback({
+  const feedback = publishGitLabJobFeedback({
     rendered: routedOutcome.rendered,
     summaryPath,
     presentation: "deploy-verification",
   });
+  writeGitLabPresentationOutputs(feedback);
 
   console.log(
     `Control9 submitted ${inputs.iacTool} deploy verification envelope ${envelope.envelopeId} in ${inputs.mode} mode.`,

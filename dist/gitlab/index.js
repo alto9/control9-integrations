@@ -33261,6 +33261,98 @@ async function publishWorkflowFeedback(input, deps = {}) {
 
 /***/ }),
 
+/***/ 51:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.buildLogFallbackLines = exports.GITLAB_OUTPUT_ENV = exports.DISABLE_SECTION_MARKERS_ENV = exports.DEPLOY_VERIFICATION_SECTION_ID = exports.POLICY_SECTION_ID = void 0;
+exports.buildLogPrefixLine = buildLogPrefixLine;
+exports.buildSectionStartMarker = buildSectionStartMarker;
+exports.buildSectionEndMarker = buildSectionEndMarker;
+exports.buildSectionBodyLines = buildSectionBodyLines;
+exports.publishGitLabJobFeedback = publishGitLabJobFeedback;
+exports.writeGitLabPresentationOutputs = writeGitLabPresentationOutputs;
+const node_fs_1 = __nccwpck_require__(3024);
+const workflow_summary_1 = __nccwpck_require__(3151);
+Object.defineProperty(exports, "buildLogFallbackLines", ({ enumerable: true, get: function () { return workflow_summary_1.buildLogFallbackLines; } }));
+const log_output_1 = __nccwpck_require__(1995);
+exports.POLICY_SECTION_ID = "control9-policy-decision";
+exports.DEPLOY_VERIFICATION_SECTION_ID = "control9-deploy-verification";
+exports.DISABLE_SECTION_MARKERS_ENV = "CONTROL9_DISABLE_JOB_LOG_SECTIONS";
+exports.GITLAB_OUTPUT_ENV = "GITLAB_ENV";
+function resolveSectionId(presentation = "policy") {
+    return presentation === "deploy-verification"
+        ? exports.DEPLOY_VERIFICATION_SECTION_ID
+        : exports.POLICY_SECTION_ID;
+}
+function buildLogPrefixLine(rendered) {
+    const prefix = rendered.blocksWorkflow ? "Control9 WARNING" : "Control9 NOTICE";
+    return `${prefix}: ${rendered.annotationMessage}`;
+}
+function buildSectionStartMarker(sectionId, sectionHeader, timestampSeconds) {
+    return `\u001b[0Ksection_start:${timestampSeconds}:${sectionId}\r\u001b[0K${sectionHeader}`;
+}
+function buildSectionEndMarker(sectionId, timestampSeconds) {
+    return `\u001b[0Ksection_end:${timestampSeconds}:${sectionId}\r\u001b[0K`;
+}
+function buildSectionBodyLines(rendered, presentation = "policy") {
+    const sectionMarkdown = (0, workflow_summary_1.buildWorkflowSummarySection)(rendered, presentation);
+    const headingLine = `## ${(0, workflow_summary_1.resolveSummarySectionHeading)(presentation)}`;
+    return sectionMarkdown
+        .split("\n")
+        .filter((line) => line !== headingLine && line.trim() !== "");
+}
+function defaultDependencies() {
+    return {
+        log: (line) => {
+            console.log(line);
+        },
+        canWriteSections: () => process.env[exports.DISABLE_SECTION_MARKERS_ENV]?.trim() !== "true",
+        nowSeconds: () => Math.floor(Date.now() / 1000),
+    };
+}
+function publishGitLabJobFeedback(input, deps = {}) {
+    const resolved = { ...defaultDependencies(), ...deps };
+    const presentation = input.presentation ?? "policy";
+    const sectionId = resolveSectionId(presentation);
+    const sectionHeader = (0, workflow_summary_1.resolveSummarySectionHeading)(presentation);
+    resolved.log(buildLogPrefixLine(input.rendered));
+    if (!resolved.canWriteSections()) {
+        for (const line of (0, log_output_1.buildBaselineLogLines)(input.rendered, presentation)) {
+            resolved.log(line);
+        }
+        if (input.summaryPath) {
+            resolved.log(`Control9 summary JSON: ${input.summaryPath}`);
+        }
+        return { sectionWritten: false, usedLogFallback: true };
+    }
+    const startTimestamp = resolved.nowSeconds();
+    resolved.log(buildSectionStartMarker(sectionId, sectionHeader, startTimestamp));
+    for (const line of buildSectionBodyLines(input.rendered, presentation)) {
+        resolved.log(line);
+    }
+    resolved.log(buildSectionEndMarker(sectionId, startTimestamp + 1));
+    if (input.summaryPath) {
+        resolved.log(`Control9 summary JSON: ${input.summaryPath}`);
+    }
+    return { sectionWritten: true, usedLogFallback: false };
+}
+function writeGitLabPresentationOutputs(result) {
+    const outputFile = process.env[exports.GITLAB_OUTPUT_ENV]?.trim();
+    if (!outputFile) {
+        return;
+    }
+    (0, node_fs_1.appendFileSync)(outputFile, [
+        `CONTROL9_JOB_SECTION_WRITTEN=${String(result.sectionWritten)}`,
+        `CONTROL9_USED_LOG_FALLBACK=${String(result.usedLogFallback)}`,
+    ].join("\n") + "\n", "utf8");
+}
+
+
+/***/ }),
+
 /***/ 1995:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -33317,7 +33409,7 @@ const client_1 = __nccwpck_require__(867);
 const routing_1 = __nccwpck_require__(6357);
 const types_1 = __nccwpck_require__(8522);
 const client_2 = __nccwpck_require__(6276);
-const log_output_1 = __nccwpck_require__(1995);
+const job_log_1 = __nccwpck_require__(51);
 exports.CONTROL9_PROVIDER_ENV = "CONTROL9_PROVIDER";
 async function runGitLabAssessment() {
     if (!process.env[exports.CONTROL9_PROVIDER_ENV]?.trim()) {
@@ -33364,11 +33456,12 @@ async function runPolicyFlow(options) {
         decisionKind: routedOutcome.decisionKindOutput,
         decisionId: submission.status === "success" ? submission.decision.decisionId : "",
     });
-    (0, log_output_1.publishBaselineLogFeedback)({
+    const feedback = (0, job_log_1.publishGitLabJobFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
         presentation: "policy",
     });
+    (0, job_log_1.writeGitLabPresentationOutputs)(feedback);
     console.log(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${envelope.envelopeId} in ${inputs.mode} mode.`);
     console.log(`Outcome ${routedOutcome.decisionKindOutput}: ${summary.message}`);
     console.log(`Summary written to ${summaryPath}.`);
@@ -33396,11 +33489,12 @@ async function runDeployVerificationFlow(options) {
         verificationStatus: routedOutcome.verificationStatusOutput,
         decisionId: submission.status === "success" ? (submission.verification.decisionId ?? "") : "",
     });
-    (0, log_output_1.publishBaselineLogFeedback)({
+    const feedback = (0, job_log_1.publishGitLabJobFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
         presentation: "deploy-verification",
     });
+    (0, job_log_1.writeGitLabPresentationOutputs)(feedback);
     console.log(`Control9 submitted ${inputs.iacTool} deploy verification envelope ${envelope.envelopeId} in ${inputs.mode} mode.`);
     console.log(`Verification ${routedOutcome.verificationStatusOutput}: ${summary.message}`);
     console.log(`Summary written to ${summaryPath}.`);
