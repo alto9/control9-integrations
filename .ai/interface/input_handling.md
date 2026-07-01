@@ -23,6 +23,10 @@ Each rendered outcome uses a stable label, title, summary, and detail lines. Pol
 | `malformed_response` | Outcome: Malformed Policy Response | Control9 received an invalid policy response | State that the response could not be normalized and name the missing or invalid field class without echoing raw payload |
 | `redaction_applied` | Outcome: Redaction Applied | Control9 redaction was applied before submission | Report redaction counts and profile (pre-submit informational outcome) |
 | `fingerprint_mismatch` | Outcome: Fingerprint Mismatch | Control9 detected an artifact fingerprint mismatch | Compare expected vs actual fingerprint for deploy verification flows |
+| `verified` (deploy verification) | Outcome: Deploy Verified | Control9 verified the deploy artifact | State that the current fingerprint matches the approved fingerprint on record |
+| `no_approved_baseline` (deploy verification) | Outcome: No Approved Baseline | Control9 found no approved fingerprint for this change | State that deploy authority requires a prior approved plan or template fingerprint |
+
+Deploy verification API failure outcomes reuse the `timeout`, `unavailable_api`, and `malformed_response` templates with deploy verification presentation headings.
 
 Follow-up metadata from the policy API is limited to safe string fields (for example `approval_url` or `action`). Structured or unknown follow-up fields are not copied into rendered output.
 

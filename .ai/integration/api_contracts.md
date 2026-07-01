@@ -11,9 +11,28 @@ This doc describes service boundaries and request or response responsibilities w
 - Client retries are bounded and safe for CI: transient network and server failures may retry with backoff inside the job timeout, while malformed configuration, invalid signatures, unsupported artifacts, and schema validation failures return actionable local errors.
 - Policy responses are normalized into `allow`, `deny`, `require_approval`, or `observe` with reason text, optional risk summary, policy version, decision id, and follow-up metadata for later rendering by workflow feedback code.
 
-## Open implementation decisions
+## Deploy verification API
 
-Implementation-level items not yet fully specified. `/refine-issue` resolves these into timeless contract prose and removes or collapses bullets when done.
+When the GitHub Action `command` input is `deploy-verification`, the client calls the deploy verification boundary instead of the policy decision boundary.
 
-### Control9 project plan
-- Describe deploy verification call placement for pre-apply, pre-deploy, and post-run evidence.
+- **Endpoint:** `POST {apiBaseUrl}/v1/deploy-verifications` (trailing slash on base URL stripped before join).
+- **Request body:** the signed action envelope (`control9.action-envelope.v0`) built from the current artifact. The envelope carries tenant, repository, ref or pull request, environment, requested authority, artifact fingerprints, and correlation identity. The control plane resolves the approved fingerprint from that context; callers do not pass a separate approval id input in this milestone.
+- **Normalized verification statuses:**
+  - `verified` — current artifact fingerprint matches the approved fingerprint on record.
+  - `fingerprint_mismatch` — a baseline exists but the current fingerprint differs; response includes `expectedFingerprint` and `actualFingerprint`.
+  - `no_approved_baseline` — no approved fingerprint exists for this governed change context; response includes human-readable `reason` text.
+- **Response fields** (when present): `verificationId`, optional linked `decisionId`, `expectedFingerprint`, `actualFingerprint`, and `reason`.
+- **Retries:** same bounded retry policy and retryable HTTP status set as policy envelope submission (`408`, `429`, `500`, `502`, `503`, `504`). Malformed HTTP 200 responses fail the job in all modes.
+- **Client testing:** treat the API as remote and mockable with fixture JSON; no live Control9 dependency in unit or integration tests.
+
+## Workflow call placement
+
+Customer workflows invoke deploy verification as a **separate action step immediately before protected deploy authority** is used:
+
+| IaC tool | Workflow moment | Typical `requested-authority` | Artifact |
+|----------|-----------------|--------------------------------|----------|
+| Terraform / OpenTofu | After plan generation, before `apply` or production role assumption | `apply` | Single plan JSON (`terraform show -json` or equivalent) |
+| CDK | After synth/diff, before `cdk deploy` | `deploy` | Synthesized template JSON or plan artifact used for the deploy |
+| CloudFormation | After change set or template prep, before stack update | `deploy` | Template JSON or plan artifact used for the update |
+
+**Post-run evidence:** the control plane may record deploy outcomes asynchronously for timeline search. This integrations milestone does not add a blocking post-deploy verification client call; only pre-apply and pre-deploy steps above are in scope.

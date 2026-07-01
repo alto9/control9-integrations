@@ -26,7 +26,7 @@ This doc describes configuration classes and safe defaults for the GitHub Action
 - Target environment (required): governed environment key such as `staging` or `production`.
 - Requested authority (required): deploy or change authority requested by the workflow step, such as `plan` or `apply`.
 - IaC tool (required): `terraform`, `opentofu`, `cdk`, or `cloudformation`.
-- Command category (required): `plan`, `synth`, `diff`, or `deploy-verification`.
+- Command category (required): `plan`, `synth`, `diff`, or `deploy-verification`. The `deploy-verification` value selects the deploy verification API path documented in `integration/api_contracts.md` instead of policy envelope submission.
 - Artifact paths (required): comma-separated repository-relative paths to plan JSON, synthesized templates, or diff artifacts.
 - Working directory (default `.`): repository-relative base for artifact path resolution.
 
