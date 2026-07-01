@@ -80,3 +80,15 @@ GitLab pipelines configure the component through `include:inputs` (remote includ
 | Fail-open environments | `fail-open-environments` | `INPUT_FAIL_OPEN_ENVIRONMENTS` |
 
 GitLab summary output uses `CI_PROJECT_DIR/.control9/output/control9-summary.json` when `RUNNER_TEMP` is unavailable, matching the GitHub fallback path semantics relative to the job working directory.
+
+### GitLab API tokens (presentation milestone)
+
+MR note publishing reads tokens from CI/CD variables (not component inputs):
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `CONTROL9_GITLAB_TOKEN` | no | Preferred masked/protected variable with `api` scope for MR note create/update |
+| `GITLAB_TOKEN` | no | Fallback when `CONTROL9_GITLAB_TOKEN` is unset |
+| `CI_JOB_TOKEN` | automatic | Used only when neither variable above is set and the job runs in a merge request pipeline; subject to project job token allowlist settings |
+
+When no token can publish MR notes, the job continues after writing collapsible sections and log prefixes; MR note state is reported as `skipped-no-token` or `skipped-permission` in structured outputs.
