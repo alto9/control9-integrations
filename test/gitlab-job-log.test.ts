@@ -186,10 +186,15 @@ describe("writeGitLabPresentationOutputs", () => {
     const envPath = path.join(tempDirectory, "gitlab.env");
     process.env.GITLAB_ENV = envPath;
 
-    writeGitLabPresentationOutputs({ sectionWritten: true, usedLogFallback: false });
+    writeGitLabPresentationOutputs({
+      sectionWritten: true,
+      usedLogFallback: false,
+      mrNoteState: "skipped-no-mr",
+    });
 
     const contents = readFileSync(envPath, "utf8");
     expect(contents).toContain("CONTROL9_JOB_SECTION_WRITTEN=true");
     expect(contents).toContain("CONTROL9_USED_LOG_FALLBACK=false");
+    expect(contents).toContain("CONTROL9_MR_NOTE_STATE=skipped-no-mr");
   });
 });

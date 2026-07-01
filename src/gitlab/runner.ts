@@ -18,7 +18,7 @@ import { fingerprintArtifacts, routeCommand } from "../routing";
 import { Control9ActionError } from "../types";
 import { createVerificationClient } from "../verification/client";
 import {
-  publishGitLabJobFeedback,
+  publishGitLabPresentationFeedback,
   writeGitLabPresentationOutputs,
 } from "./job-log";
 
@@ -94,7 +94,7 @@ async function runPolicyFlow(options: {
     decisionId: submission.status === "success" ? submission.decision.decisionId : "",
   });
 
-  const feedback = publishGitLabJobFeedback({
+  const feedback = await publishGitLabPresentationFeedback({
     rendered: routedOutcome.rendered,
     summaryPath,
     presentation: "policy",
@@ -155,7 +155,7 @@ async function runDeployVerificationFlow(options: {
       submission.status === "success" ? (submission.verification.decisionId ?? "") : "",
   });
 
-  const feedback = publishGitLabJobFeedback({
+  const feedback = await publishGitLabPresentationFeedback({
     rendered: routedOutcome.rendered,
     summaryPath,
     presentation: "deploy-verification",

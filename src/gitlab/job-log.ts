@@ -8,6 +8,9 @@ import {
 } from "../github/workflow-summary";
 import type { RenderedDecisionFeedback } from "../rendering/types";
 import { buildBaselineLogLines } from "./log-output";
+import { publishMrNote, type MrNoteState } from "./mr-note";
+
+export type { MrNoteState };
 
 export const POLICY_SECTION_ID = "control9-policy-decision";
 export const DEPLOY_VERIFICATION_SECTION_ID = "control9-deploy-verification";
@@ -26,6 +29,12 @@ export interface GitLabJobFeedbackResult {
   sectionWritten: boolean;
   usedLogFallback: boolean;
 }
+
+export interface GitLabPresentationFeedbackResult extends GitLabJobFeedbackResult {
+  mrNoteState: MrNoteState;
+}
+
+export type PublishGitLabPresentationFeedbackInput = PublishGitLabJobFeedbackInput;
 
 export interface GitLabJobFeedbackDependencies {
   log: (line: string) => void;
@@ -112,7 +121,21 @@ export function publishGitLabJobFeedback(
   return { sectionWritten: true, usedLogFallback: false };
 }
 
-export function writeGitLabPresentationOutputs(result: GitLabJobFeedbackResult): void {
+export async function publishGitLabPresentationFeedback(
+  input: PublishGitLabPresentationFeedbackInput,
+  deps: Partial<GitLabJobFeedbackDependencies> = {},
+): Promise<GitLabPresentationFeedbackResult> {
+  const presentation = input.presentation ?? "policy";
+  const jobFeedback = publishGitLabJobFeedback(input, deps);
+  const mrNote = await publishMrNote({ rendered: input.rendered, presentation });
+
+  return {
+    ...jobFeedback,
+    mrNoteState: mrNote.state,
+  };
+}
+
+export function writeGitLabPresentationOutputs(result: GitLabPresentationFeedbackResult): void {
   const outputFile = process.env[GITLAB_OUTPUT_ENV]?.trim();
   if (!outputFile) {
     return;
@@ -123,6 +146,7 @@ export function writeGitLabPresentationOutputs(result: GitLabJobFeedbackResult):
     [
       `CONTROL9_JOB_SECTION_WRITTEN=${String(result.sectionWritten)}`,
       `CONTROL9_USED_LOG_FALLBACK=${String(result.usedLogFallback)}`,
+      `CONTROL9_MR_NOTE_STATE=${result.mrNoteState}`,
     ].join("\n") + "\n",
     "utf8",
   );
