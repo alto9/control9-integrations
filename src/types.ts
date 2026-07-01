@@ -8,7 +8,11 @@ export type DecisionKind = "allow" | "deny" | "require_approval" | "observe" | "
 
 export type FailureDecisionKind = "unavailable_api" | "timeout" | "malformed_response";
 
+export type VerificationStatus = "verified" | "fingerprint_mismatch" | "no_approved_baseline";
+
 export type OutputDecisionKind = Exclude<DecisionKind, "pending"> | FailureDecisionKind;
+
+export type OutputVerificationStatus = VerificationStatus | FailureDecisionKind;
 
 export interface ActionInputs {
   mode: RuntimeMode;
@@ -45,8 +49,10 @@ export interface ValidationSummary {
   envelopeId: string;
   correlationId: string;
   decisionId: string;
-  decisionKind: OutputDecisionKind;
+  decisionKind: OutputDecisionKind | "";
   decisionReason: string;
+  verificationId: string;
+  verificationStatus: OutputVerificationStatus | "";
   redactionCount: number;
   status: "submitted" | "submission_failed";
   message: string;
@@ -56,7 +62,9 @@ export interface ActionResult {
   envelopeId: string;
   artifactFingerprint: string;
   decisionId: string;
-  decisionKind: OutputDecisionKind;
+  decisionKind: OutputDecisionKind | "";
+  verificationId: string;
+  verificationStatus: OutputVerificationStatus | "";
   summaryPath: string;
 }
 

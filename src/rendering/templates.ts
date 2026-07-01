@@ -44,6 +44,14 @@ export const OUTCOME_TEMPLATES: Record<RenderOutcomeKind, OutcomeTemplate> = {
     label: "Outcome: Fingerprint Mismatch",
     title: "Control9 detected an artifact fingerprint mismatch",
   },
+  verified: {
+    label: "Outcome: Verified",
+    title: "Control9 verified this artifact fingerprint",
+  },
+  no_approved_baseline: {
+    label: "Outcome: No Approved Baseline",
+    title: "Control9 found no approved baseline for this change",
+  },
 };
 
 export function formatRedactionStatus(report: RedactionReport | undefined): string | undefined {
@@ -97,7 +105,13 @@ function readSafeFollowUpString(
 export function buildPolicyDecisionSummary(
   outcomeKind: Exclude<
     RenderOutcomeKind,
-    "timeout" | "unavailable_api" | "malformed_response" | "redaction_applied" | "fingerprint_mismatch"
+    | "timeout"
+    | "unavailable_api"
+    | "malformed_response"
+    | "redaction_applied"
+    | "fingerprint_mismatch"
+    | "verified"
+    | "no_approved_baseline"
   >,
   decision: PolicyDecision,
   runtimeMode: RuntimeMode | undefined,
@@ -153,10 +167,38 @@ export function buildRedactionAppliedSummary(report: RedactionReport): string {
 export function buildFingerprintMismatchSummary(
   expectedFingerprint: string | undefined,
   actualFingerprint: string | undefined,
+  runtimeMode?: RuntimeMode,
 ): string {
   const expected = expectedFingerprint ?? "unknown";
   const actual = actualFingerprint ?? "unknown";
-  return `The current artifact fingerprint (${actual}) does not match the approved fingerprint (${expected}). Review the change set before proceeding with deploy authority.`;
+  const base = `The current artifact fingerprint (${actual}) does not match the approved fingerprint (${expected}). Review the change set before proceeding with deploy authority.`;
+  if (runtimeMode === "shadow") {
+    return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+  }
+  return base;
+}
+
+export function buildVerifiedSummary(
+  artifactFingerprint: string | undefined,
+  runtimeMode?: RuntimeMode,
+): string {
+  const fingerprint = artifactFingerprint ?? "the submitted artifact";
+  const base = `The current artifact fingerprint matches the approved fingerprint on record for ${fingerprint}.`;
+  if (runtimeMode === "shadow") {
+    return `${base} Shadow mode is active; deploy verification completed successfully.`;
+  }
+  return base;
+}
+
+export function buildNoApprovedBaselineSummary(
+  reason: string,
+  runtimeMode?: RuntimeMode,
+): string {
+  const base = reason.trim() || "No approved fingerprint exists for this governed change context.";
+  if (runtimeMode === "shadow") {
+    return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+  }
+  return base;
 }
 
 export function buildErrorDetailLines(
@@ -165,7 +207,9 @@ export function buildErrorDetailLines(
     | "unavailable_api"
     | "malformed_response"
     | "redaction_applied"
-    | "fingerprint_mismatch",
+    | "fingerprint_mismatch"
+    | "verified"
+    | "no_approved_baseline",
   options: {
     artifactFingerprint?: string;
     targetEnvironment?: string;
@@ -173,6 +217,9 @@ export function buildErrorDetailLines(
     expectedFingerprint?: string;
     actualFingerprint?: string;
     detail?: string;
+    verificationId?: string;
+    decisionId?: string;
+    reason?: string;
   },
 ): string[] {
   const lines: string[] = [];
@@ -201,6 +248,18 @@ export function buildErrorDetailLines(
     }
     if (options.actualFingerprint) {
       lines.push(`Actual fingerprint: ${options.actualFingerprint}`);
+    }
+  }
+
+  if (outcomeKind === "verified" || outcomeKind === "no_approved_baseline") {
+    if (options.verificationId) {
+      lines.push(`Verification id: ${options.verificationId}`);
+    }
+    if (options.decisionId) {
+      lines.push(`Decision id: ${options.decisionId}`);
+    }
+    if (outcomeKind === "no_approved_baseline" && options.reason?.trim()) {
+      lines.push(`Reason: ${options.reason.trim()}`);
     }
   }
 

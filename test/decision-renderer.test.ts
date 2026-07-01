@@ -88,6 +88,8 @@ describe("renderDecisionFeedback", () => {
       "malformed_response",
       "redaction_applied",
       "fingerprint_mismatch",
+      "verified",
+      "no_approved_baseline",
     ] as const) {
       const rendered =
         kind === "redaction_applied"
@@ -98,13 +100,25 @@ describe("renderDecisionFeedback", () => {
                 expectedFingerprint: "fp-approved",
                 actualFingerprint: "fp-current",
               })
-            : kind === "malformed_response"
-              ? renderDecisionFeedback({ kind, detail: "missing decision id" })
-              : renderDecisionFeedback({ kind });
+            : kind === "verified"
+              ? renderDecisionFeedback({
+                  kind,
+                  verificationId: "verify-001",
+                  artifactFingerprint: "fp-current",
+                })
+              : kind === "no_approved_baseline"
+                ? renderDecisionFeedback({
+                    kind,
+                    verificationId: "verify-no-baseline",
+                    reason: "No approved fingerprint exists.",
+                  })
+                : kind === "malformed_response"
+                  ? renderDecisionFeedback({ kind, detail: "missing decision id" })
+                  : renderDecisionFeedback({ kind });
       labels.add(rendered.label);
     }
 
-    expect(labels.size).toBe(9);
+    expect(labels.size).toBe(11);
   });
 
   it("marks observe decisions as advisory and non-blocking", () => {
@@ -234,11 +248,70 @@ describe("renderDecisionFeedback", () => {
       kind: "fingerprint_mismatch",
       expectedFingerprint: "fp-approved",
       actualFingerprint: "fp-current",
+      runtimeMode: "enforce",
     });
     expect(mismatch.outcomeKind).toBe("fingerprint_mismatch");
     expect(mismatch.blocksWorkflow).toBe(true);
     expect(mismatch.detailLines.join("\n")).toContain("Expected fingerprint: fp-approved");
     expect(mismatch.detailLines.join("\n")).toContain("Actual fingerprint: fp-current");
+
+    const verified = renderDecisionFeedback({
+      kind: "verified",
+      verificationId: "verify-001",
+      artifactFingerprint: "fp-current",
+    });
+    expect(verified.outcomeKind).toBe("verified");
+    expect(verified.blocksWorkflow).toBe(false);
+    expect(verified.detailLines.join("\n")).toContain("Verification id: verify-001");
+
+    const noBaseline = renderDecisionFeedback({
+      kind: "no_approved_baseline",
+      verificationId: "verify-no-baseline",
+      reason: "No approved fingerprint exists.",
+    });
+    expect(noBaseline.outcomeKind).toBe("no_approved_baseline");
+    expect(noBaseline.detailLines.join("\n")).toContain("Reason: No approved fingerprint exists.");
+  });
+
+  it("does not block fingerprint mismatch or no approved baseline in shadow mode", () => {
+    const mismatch = renderDecisionFeedback({
+      kind: "fingerprint_mismatch",
+      expectedFingerprint: "fp-approved",
+      actualFingerprint: "fp-current",
+      runtimeMode: "shadow",
+    });
+    expect(mismatch.blocksWorkflow).toBe(false);
+    expect(mismatch.summary).toMatch(/Shadow mode is active/i);
+
+    const noBaseline = renderDecisionFeedback({
+      kind: "no_approved_baseline",
+      verificationId: "verify-no-baseline",
+      reason: "No approved fingerprint exists.",
+      runtimeMode: "shadow",
+    });
+    expect(noBaseline.blocksWorkflow).toBe(false);
+    expect(noBaseline.summary).toMatch(/Shadow mode is active/i);
+  });
+
+  it("blocks fingerprint mismatch and no approved baseline in enforce mode", () => {
+    for (const kind of ["fingerprint_mismatch", "no_approved_baseline"] as const) {
+      const rendered =
+        kind === "fingerprint_mismatch"
+          ? renderDecisionFeedback({
+              kind,
+              expectedFingerprint: "fp-approved",
+              actualFingerprint: "fp-current",
+              runtimeMode: "enforce",
+            })
+          : renderDecisionFeedback({
+              kind,
+              verificationId: "verify-no-baseline",
+              reason: "No approved fingerprint exists.",
+              runtimeMode: "enforce",
+            });
+
+      expect(rendered.blocksWorkflow).toBe(true);
+    }
   });
 
   it("exposes structured metadata for downstream workflow and PR renderers", () => {

@@ -1,0 +1,7 @@
+{
+  "verificationId": "verify-001",
+  "verificationStatus": "verified",
+  "decisionId": "dec-approved-001",
+  "artifactFingerprint": "fp-verified-001",
+  "targetEnvironment": "production"
+}
