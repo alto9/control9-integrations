@@ -55,6 +55,10 @@ outputs:
     description: Control9 policy decision identifier.
   decision-kind:
     description: Normalized decision kind (allow, deny, require_approval, observe) or failure sentinel (unavailable_api, timeout, malformed_response).
+  verification-id:
+    description: Control9 deploy verification identifier when command is deploy-verification.
+  verification-status:
+    description: Normalized deploy verification status (verified, fingerprint_mismatch, no_approved_baseline) or failure sentinel (unavailable_api, timeout, malformed_response).
   summary-path:
     description: Path to the local summary JSON written for workflow rendering.
   summary-written:

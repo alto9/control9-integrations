@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PolicyDecision, RedactionReport } from "../src/envelope/types";
 import {
+  DEPLOY_VERIFICATION_SECTION_HEADING,
   SUMMARY_SECTION_HEADING,
   appendWorkflowSummary,
   buildLogFallbackLines,
@@ -48,6 +49,19 @@ describe("buildWorkflowSummarySection", () => {
     expect(markdown.startsWith(`## ${SUMMARY_SECTION_HEADING}`)).toBe(true);
     expect(markdown).toContain("Control9 allowed this change");
     expect(markdown).toContain("Decision id: dec-allow-1");
+  });
+
+  it("uses the deploy verification heading when requested", () => {
+    const rendered = renderDecisionFeedback({
+      kind: "verified",
+      verificationId: "verify-001",
+      artifactFingerprint: "fp-current",
+    });
+
+    const markdown = buildWorkflowSummarySection(rendered, "deploy-verification");
+
+    expect(markdown.startsWith(`## ${DEPLOY_VERIFICATION_SECTION_HEADING}`)).toBe(true);
+    expect(markdown).toContain("Control9 verified this artifact fingerprint");
   });
 });
 

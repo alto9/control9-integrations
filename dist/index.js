@@ -33062,7 +33062,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SUMMARY_SECTION_HEADING = exports.SUMMARY_ENV_VAR = void 0;
+exports.DEPLOY_VERIFICATION_SECTION_HEADING = exports.SUMMARY_SECTION_HEADING = exports.SUMMARY_ENV_VAR = void 0;
+exports.resolveSummarySectionHeading = resolveSummarySectionHeading;
 exports.buildWorkflowSummarySection = buildWorkflowSummarySection;
 exports.buildLogFallbackLines = buildLogFallbackLines;
 exports.emitDecisionAnnotation = emitDecisionAnnotation;
@@ -33073,12 +33074,20 @@ const core = __importStar(__nccwpck_require__(7484));
 const pr_comment_1 = __nccwpck_require__(1685);
 exports.SUMMARY_ENV_VAR = "GITHUB_STEP_SUMMARY";
 exports.SUMMARY_SECTION_HEADING = "Control9 Policy Decision";
-function buildWorkflowSummarySection(rendered) {
-    return [`## ${exports.SUMMARY_SECTION_HEADING}`, "", rendered.bodyMarkdown].join("\n");
+exports.DEPLOY_VERIFICATION_SECTION_HEADING = "Control9 Deploy Verification";
+function resolveSummarySectionHeading(presentation = "policy") {
+    return presentation === "deploy-verification"
+        ? exports.DEPLOY_VERIFICATION_SECTION_HEADING
+        : exports.SUMMARY_SECTION_HEADING;
 }
-function buildLogFallbackLines(rendered) {
+function buildWorkflowSummarySection(rendered, presentation = "policy") {
+    const heading = resolveSummarySectionHeading(presentation);
+    return [`## ${heading}`, "", rendered.bodyMarkdown].join("\n");
+}
+function buildLogFallbackLines(rendered, presentation = "policy") {
+    const heading = resolveSummarySectionHeading(presentation);
     return [
-        `## ${exports.SUMMARY_SECTION_HEADING}`,
+        `## ${heading}`,
         rendered.label,
         rendered.summary,
         ...rendered.detailLines.map((line) => `- ${line}`),
@@ -33121,13 +33130,14 @@ function defaultDependencies() {
 }
 async function publishWorkflowFeedback(input, deps = {}) {
     const resolved = { ...defaultDependencies(), ...deps };
-    const sectionMarkdown = buildWorkflowSummarySection(input.rendered);
+    const presentation = input.presentation ?? "policy";
+    const sectionMarkdown = buildWorkflowSummarySection(input.rendered, presentation);
     emitDecisionAnnotation(input.rendered, resolved);
     const summaryWritten = await resolved.appendSummary(sectionMarkdown);
     let usedLogFallback = false;
     if (!summaryWritten) {
         usedLogFallback = true;
-        for (const line of buildLogFallbackLines(input.rendered)) {
+        for (const line of buildLogFallbackLines(input.rendered, presentation)) {
             resolved.info(line);
         }
         if (input.summaryPath) {
@@ -33194,11 +33204,30 @@ const outputs_1 = __nccwpck_require__(7729);
 const client_1 = __nccwpck_require__(867);
 const routing_1 = __nccwpck_require__(6357);
 const types_1 = __nccwpck_require__(8522);
+const client_2 = __nccwpck_require__(6276);
 async function runAction() {
     const inputs = (0, inputs_1.readActionInputsFromEnv)();
     const routed = (0, routing_1.routeCommand)(inputs);
     const artifactFingerprint = (0, routing_1.fingerprintArtifacts)(routed.resolvedArtifactPaths);
     const envelope = (0, build_1.buildSignedActionEnvelope)(inputs, routed);
+    if (inputs.command === "deploy-verification") {
+        await runDeployVerificationFlow({
+            inputs,
+            routed,
+            artifactFingerprint,
+            envelope,
+        });
+        return;
+    }
+    await runPolicyFlow({
+        inputs,
+        routed,
+        artifactFingerprint,
+        envelope,
+    });
+}
+async function runPolicyFlow(options) {
+    const { inputs, routed, artifactFingerprint, envelope } = options;
     const policyClient = (0, client_1.createPolicyClient)({ apiBaseUrl: inputs.control9ApiUrl });
     const submission = await policyClient.submitEnvelopeWithOutcome({ envelope });
     const routedOutcome = (0, route_1.routePolicySubmissionOutcome)({
@@ -33212,20 +33241,66 @@ async function runAction() {
         ? (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.decision)
         : (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
-    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, routedOutcome.decisionKindOutput, submission.status === "success" ? submission.decision.decisionId : "");
+    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
+        decisionKind: routedOutcome.decisionKindOutput,
+        decisionId: submission.status === "success" ? submission.decision.decisionId : "",
+    });
     const feedback = await (0, workflow_summary_1.publishWorkflowFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
+        presentation: "policy",
     });
     core.setOutput("envelope-id", result.envelopeId);
     core.setOutput("artifact-fingerprint", result.artifactFingerprint);
     core.setOutput("decision-id", result.decisionId);
     core.setOutput("decision-kind", result.decisionKind);
+    core.setOutput("verification-id", result.verificationId);
+    core.setOutput("verification-status", result.verificationStatus);
     core.setOutput("summary-path", result.summaryPath);
     core.setOutput("summary-written", String(feedback.summaryWritten));
     core.setOutput("pr-comment-state", feedback.prCommentState);
     core.info(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${result.envelopeId} in ${inputs.mode} mode.`);
     core.info(`Outcome ${result.decisionKind}: ${summary.message}`);
+    core.info(`Summary written to ${summaryPath}.`);
+    if (routedOutcome.blocksWorkflow) {
+        throw new types_1.Control9ActionError(routedOutcome.rendered.summary);
+    }
+}
+async function runDeployVerificationFlow(options) {
+    const { inputs, routed, artifactFingerprint, envelope } = options;
+    const verificationClient = (0, client_2.createVerificationClient)({ apiBaseUrl: inputs.control9ApiUrl });
+    const submission = await verificationClient.submitVerificationWithOutcome({ envelope });
+    const routedOutcome = (0, route_1.routeVerificationSubmissionOutcome)({
+        submission,
+        artifactFingerprint,
+        targetEnvironment: inputs.targetEnvironment,
+        runtimeMode: inputs.mode,
+    });
+    const summary = submission.status === "success"
+        ? (0, outputs_1.buildVerificationValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.verification)
+        : (0, outputs_1.buildVerificationFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
+    const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
+    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
+        verificationId: submission.status === "success" ? submission.verification.verificationId : "",
+        verificationStatus: routedOutcome.verificationStatusOutput,
+        decisionId: submission.status === "success" ? (submission.verification.decisionId ?? "") : "",
+    });
+    const feedback = await (0, workflow_summary_1.publishWorkflowFeedback)({
+        rendered: routedOutcome.rendered,
+        summaryPath,
+        presentation: "deploy-verification",
+    });
+    core.setOutput("envelope-id", result.envelopeId);
+    core.setOutput("artifact-fingerprint", result.artifactFingerprint);
+    core.setOutput("decision-id", result.decisionId);
+    core.setOutput("decision-kind", result.decisionKind);
+    core.setOutput("verification-id", result.verificationId);
+    core.setOutput("verification-status", result.verificationStatus);
+    core.setOutput("summary-path", result.summaryPath);
+    core.setOutput("summary-written", String(feedback.summaryWritten));
+    core.setOutput("pr-comment-state", feedback.prCommentState);
+    core.info(`Control9 submitted ${inputs.iacTool} deploy verification envelope ${result.envelopeId} in ${inputs.mode} mode.`);
+    core.info(`Verification ${result.verificationStatus}: ${summary.message}`);
     core.info(`Summary written to ${summaryPath}.`);
     if (routedOutcome.blocksWorkflow) {
         throw new types_1.Control9ActionError(routedOutcome.rendered.summary);
@@ -33355,6 +33430,7 @@ function readActionInputsFromEnv() {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.routeVerificationSubmissionOutcome = routeVerificationSubmissionOutcome;
 exports.routePolicySubmissionOutcome = routePolicySubmissionOutcome;
 const decision_renderer_1 = __nccwpck_require__(1206);
 function resolveApiFailureBlocking(failureKind, runtimeMode) {
@@ -33362,6 +33438,94 @@ function resolveApiFailureBlocking(failureKind, runtimeMode) {
         return true;
     }
     return runtimeMode === "enforce";
+}
+function resolveVerificationBlocking(verificationStatus, runtimeMode) {
+    if (verificationStatus === "verified") {
+        return false;
+    }
+    return runtimeMode === "enforce";
+}
+function routeVerificationSubmissionOutcome(options) {
+    const { submission, artifactFingerprint, targetEnvironment, runtimeMode } = options;
+    if (submission.status === "success") {
+        const { verification } = submission;
+        const renderInput = buildVerificationRenderInput({
+            verification,
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+        });
+        const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
+        const blocksWorkflow = resolveVerificationBlocking(verification.verificationStatus, runtimeMode);
+        return {
+            renderInput,
+            rendered: {
+                ...rendered,
+                blocksWorkflow,
+            },
+            blocksWorkflow,
+            verificationStatusOutput: verification.verificationStatus,
+            summaryMessage: rendered.summary,
+        };
+    }
+    const renderInput = submission.failureKind === "malformed_response"
+        ? {
+            kind: "malformed_response",
+            artifactFingerprint,
+            targetEnvironment,
+            detail: submission.detail,
+            runtimeMode,
+        }
+        : {
+            kind: submission.failureKind,
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+        };
+    const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
+    const blocksWorkflow = resolveApiFailureBlocking(submission.failureKind, runtimeMode);
+    return {
+        renderInput,
+        rendered: {
+            ...rendered,
+            blocksWorkflow,
+        },
+        blocksWorkflow,
+        verificationStatusOutput: submission.failureKind,
+        summaryMessage: rendered.summary,
+    };
+}
+function buildVerificationRenderInput(options) {
+    const { verification, artifactFingerprint, targetEnvironment, runtimeMode } = options;
+    switch (verification.verificationStatus) {
+        case "verified":
+            return {
+                kind: "verified",
+                verificationId: verification.verificationId,
+                decisionId: verification.decisionId,
+                artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+            };
+        case "fingerprint_mismatch":
+            return {
+                kind: "fingerprint_mismatch",
+                expectedFingerprint: verification.expectedFingerprint,
+                actualFingerprint: verification.actualFingerprint ?? artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+            };
+        case "no_approved_baseline":
+            return {
+                kind: "no_approved_baseline",
+                verificationId: verification.verificationId,
+                reason: verification.reason ?? "No approved fingerprint exists for this governed change context.",
+                decisionId: verification.decisionId,
+                artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+            };
+    }
 }
 function routePolicySubmissionOutcome(options) {
     const { submission, artifactFingerprint, targetEnvironment, redactionReport, runtimeMode, } = options;
@@ -33425,6 +33589,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildValidationSummary = buildValidationSummary;
 exports.buildFailureValidationSummary = buildFailureValidationSummary;
+exports.buildVerificationValidationSummary = buildVerificationValidationSummary;
+exports.buildVerificationFailureValidationSummary = buildVerificationFailureValidationSummary;
 exports.writeSummaryFile = writeSummaryFile;
 exports.buildActionResult = buildActionResult;
 const node_fs_1 = __nccwpck_require__(3024);
@@ -33445,6 +33611,8 @@ function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, d
         decisionId: decision.decisionId,
         decisionKind: decision.decisionKind,
         decisionReason: decision.reason,
+        verificationId: "",
+        verificationStatus: "",
         redactionCount: envelope.redactionReport.totalRedactions,
         status: "submitted",
         message: decision.reason,
@@ -33466,6 +33634,54 @@ function buildFailureValidationSummary(inputs, routed, artifactFingerprint, enve
         decisionId: "",
         decisionKind: submission.failureKind,
         decisionReason: summaryMessage,
+        verificationId: "",
+        verificationStatus: "",
+        redactionCount: envelope.redactionReport.totalRedactions,
+        status: "submission_failed",
+        message: summaryMessage,
+    };
+}
+function buildVerificationValidationSummary(inputs, routed, artifactFingerprint, envelope, verification) {
+    return {
+        mode: inputs.mode,
+        tenantId: inputs.tenantId,
+        targetEnvironment: inputs.targetEnvironment,
+        requestedAuthority: inputs.requestedAuthority,
+        iacTool: routed.iacTool,
+        command: routed.command,
+        artifactFingerprint,
+        artifactPaths: routed.artifactPaths,
+        redactionProfile: inputs.redactionProfile ?? "standard",
+        envelopeId: envelope.envelopeId,
+        correlationId: envelope.correlationId,
+        decisionId: verification.decisionId ?? "",
+        decisionKind: "",
+        decisionReason: verification.reason ?? "",
+        verificationId: verification.verificationId,
+        verificationStatus: verification.verificationStatus,
+        redactionCount: envelope.redactionReport.totalRedactions,
+        status: "submitted",
+        message: verification.reason ?? verification.verificationStatus,
+    };
+}
+function buildVerificationFailureValidationSummary(inputs, routed, artifactFingerprint, envelope, submission, summaryMessage) {
+    return {
+        mode: inputs.mode,
+        tenantId: inputs.tenantId,
+        targetEnvironment: inputs.targetEnvironment,
+        requestedAuthority: inputs.requestedAuthority,
+        iacTool: routed.iacTool,
+        command: routed.command,
+        artifactFingerprint,
+        artifactPaths: routed.artifactPaths,
+        redactionProfile: inputs.redactionProfile ?? "standard",
+        envelopeId: envelope.envelopeId,
+        correlationId: envelope.correlationId,
+        decisionId: "",
+        decisionKind: "",
+        decisionReason: summaryMessage,
+        verificationId: "",
+        verificationStatus: submission.failureKind,
         redactionCount: envelope.redactionReport.totalRedactions,
         status: "submission_failed",
         message: summaryMessage,
@@ -33479,12 +33695,14 @@ function writeSummaryFile(summary) {
     (0, node_fs_1.writeFileSync)(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
     return summaryPath;
 }
-function buildActionResult(summaryPath, artifactFingerprint, envelope, decisionKind, decisionId = "") {
+function buildActionResult(summaryPath, artifactFingerprint, envelope, options) {
     return {
         envelopeId: envelope.envelopeId,
         artifactFingerprint,
-        decisionId,
-        decisionKind,
+        decisionId: options.decisionId ?? "",
+        decisionKind: options.decisionKind ?? "",
+        verificationId: options.verificationId ?? "",
+        verificationStatus: options.verificationStatus ?? "",
         summaryPath,
     };
 }
@@ -33969,10 +34187,19 @@ function resolveBlockingBehavior(outcomeKind, runtimeMode) {
     if (outcomeKind === "malformed_response") {
         return { isAdvisory: false, blocksWorkflow: true };
     }
+    if (outcomeKind === "verified") {
+        return { isAdvisory: false, blocksWorkflow: false };
+    }
+    if (outcomeKind === "fingerprint_mismatch" || outcomeKind === "no_approved_baseline") {
+        if (runtimeMode === "shadow") {
+            return { isAdvisory: true, blocksWorkflow: false };
+        }
+        return { isAdvisory: false, blocksWorkflow: true };
+    }
     if (runtimeMode === "shadow") {
         return { isAdvisory: outcomeKind === "require_approval", blocksWorkflow: false };
     }
-    if (outcomeKind === "deny" || outcomeKind === "fingerprint_mismatch") {
+    if (outcomeKind === "deny") {
         return { isAdvisory: false, blocksWorkflow: true };
     }
     if (outcomeKind === "require_approval") {
@@ -34000,6 +34227,10 @@ function renderDecisionFeedback(input) {
             return renderRedactionApplied(input);
         case "fingerprint_mismatch":
             return renderFingerprintMismatch(input);
+        case "verified":
+            return renderVerified(input);
+        case "no_approved_baseline":
+            return renderNoApprovedBaseline(input);
     }
 }
 function renderPolicyDecision(input) {
@@ -34124,8 +34355,9 @@ function renderRedactionApplied(input) {
 function renderFingerprintMismatch(input) {
     const outcomeKind = "fingerprint_mismatch";
     const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
-    const summary = (0, templates_1.buildFingerprintMismatchSummary)(input.expectedFingerprint, input.actualFingerprint);
+    const summary = (0, templates_1.buildFingerprintMismatchSummary)(input.expectedFingerprint, input.actualFingerprint, input.runtimeMode);
     const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
     return {
         outcomeKind,
         label: template.label,
@@ -34134,12 +34366,57 @@ function renderFingerprintMismatch(input) {
         detailLines,
         bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
         annotationMessage: `${template.label} — ${summary}`,
-        isAdvisory: false,
-        blocksWorkflow: true,
+        ...behavior,
         metadata: {
             targetEnvironment: input.targetEnvironment,
             expectedFingerprint: input.expectedFingerprint,
             actualFingerprint: input.actualFingerprint,
+        },
+    };
+}
+function renderVerified(input) {
+    const outcomeKind = "verified";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildVerifiedSummary)(input.artifactFingerprint, input.runtimeMode);
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        ...behavior,
+        metadata: {
+            verificationId: input.verificationId,
+            decisionId: input.decisionId,
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
+        },
+    };
+}
+function renderNoApprovedBaseline(input) {
+    const outcomeKind = "no_approved_baseline";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildNoApprovedBaselineSummary)(input.reason, input.runtimeMode);
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        ...behavior,
+        metadata: {
+            verificationId: input.verificationId,
+            decisionId: input.decisionId,
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
         },
     };
 }
@@ -34162,6 +34439,8 @@ exports.buildUnavailableApiSummary = buildUnavailableApiSummary;
 exports.buildMalformedResponseSummary = buildMalformedResponseSummary;
 exports.buildRedactionAppliedSummary = buildRedactionAppliedSummary;
 exports.buildFingerprintMismatchSummary = buildFingerprintMismatchSummary;
+exports.buildVerifiedSummary = buildVerifiedSummary;
+exports.buildNoApprovedBaselineSummary = buildNoApprovedBaselineSummary;
 exports.buildErrorDetailLines = buildErrorDetailLines;
 exports.buildPolicyDetailLines = buildPolicyDetailLines;
 exports.buildBodyMarkdown = buildBodyMarkdown;
@@ -34201,6 +34480,14 @@ exports.OUTCOME_TEMPLATES = {
     fingerprint_mismatch: {
         label: "Outcome: Fingerprint Mismatch",
         title: "Control9 detected an artifact fingerprint mismatch",
+    },
+    verified: {
+        label: "Outcome: Verified",
+        title: "Control9 verified this artifact fingerprint",
+    },
+    no_approved_baseline: {
+        label: "Outcome: No Approved Baseline",
+        title: "Control9 found no approved baseline for this change",
     },
 };
 function formatRedactionStatus(report) {
@@ -34279,10 +34566,29 @@ function buildRedactionAppliedSummary(report) {
     const status = formatRedactionStatus(report);
     return `Sensitive values were redacted from the action envelope before submission. ${status ?? "Redaction completed."}`;
 }
-function buildFingerprintMismatchSummary(expectedFingerprint, actualFingerprint) {
+function buildFingerprintMismatchSummary(expectedFingerprint, actualFingerprint, runtimeMode) {
     const expected = expectedFingerprint ?? "unknown";
     const actual = actualFingerprint ?? "unknown";
-    return `The current artifact fingerprint (${actual}) does not match the approved fingerprint (${expected}). Review the change set before proceeding with deploy authority.`;
+    const base = `The current artifact fingerprint (${actual}) does not match the approved fingerprint (${expected}). Review the change set before proceeding with deploy authority.`;
+    if (runtimeMode === "shadow") {
+        return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+    }
+    return base;
+}
+function buildVerifiedSummary(artifactFingerprint, runtimeMode) {
+    const fingerprint = artifactFingerprint ?? "the submitted artifact";
+    const base = `The current artifact fingerprint matches the approved fingerprint on record for ${fingerprint}.`;
+    if (runtimeMode === "shadow") {
+        return `${base} Shadow mode is active; deploy verification completed successfully.`;
+    }
+    return base;
+}
+function buildNoApprovedBaselineSummary(reason, runtimeMode) {
+    const base = reason.trim() || "No approved fingerprint exists for this governed change context.";
+    if (runtimeMode === "shadow") {
+        return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+    }
+    return base;
 }
 function buildErrorDetailLines(outcomeKind, options) {
     const lines = [];
@@ -34307,6 +34613,17 @@ function buildErrorDetailLines(outcomeKind, options) {
         }
         if (options.actualFingerprint) {
             lines.push(`Actual fingerprint: ${options.actualFingerprint}`);
+        }
+    }
+    if (outcomeKind === "verified" || outcomeKind === "no_approved_baseline") {
+        if (options.verificationId) {
+            lines.push(`Verification id: ${options.verificationId}`);
+        }
+        if (options.decisionId) {
+            lines.push(`Decision id: ${options.decisionId}`);
+        }
+        if (outcomeKind === "no_approved_baseline" && options.reason?.trim()) {
+            lines.push(`Reason: ${options.reason.trim()}`);
         }
     }
     return lines;
@@ -34838,6 +35155,198 @@ class Control9ActionError extends Error {
     }
 }
 exports.Control9ActionError = Control9ActionError;
+
+
+/***/ }),
+
+/***/ 6276:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Control9VerificationClient = void 0;
+exports.createVerificationClient = createVerificationClient;
+const submission_1 = __nccwpck_require__(5020);
+const normalize_1 = __nccwpck_require__(9964);
+const submission_2 = __nccwpck_require__(4467);
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+function isRetryableStatus(status) {
+    return RETRYABLE_STATUS_CODES.has(status);
+}
+function buildVerificationUrl(apiBaseUrl) {
+    return `${apiBaseUrl.replace(/\/$/, "")}/v1/deploy-verifications`;
+}
+class Control9VerificationClient {
+    apiBaseUrl;
+    maxAttempts;
+    initialBackoffMs;
+    fetchImpl;
+    constructor(options) {
+        this.apiBaseUrl = options.apiBaseUrl;
+        this.maxAttempts = options.maxAttempts ?? 3;
+        this.initialBackoffMs = options.initialBackoffMs ?? 100;
+        this.fetchImpl = options.fetchImpl ?? fetch;
+    }
+    async submitVerificationWithOutcome(request) {
+        const url = buildVerificationUrl(this.apiBaseUrl);
+        let lastError;
+        for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+            try {
+                const response = await this.fetchImpl(url, {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        accept: "application/json",
+                        ...(request.apiToken ? { authorization: `Bearer ${request.apiToken}` } : {}),
+                    },
+                    body: JSON.stringify(request.envelope),
+                });
+                if (!response.ok) {
+                    if (isRetryableStatus(response.status) && attempt < this.maxAttempts) {
+                        await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
+                        continue;
+                    }
+                    return {
+                        status: "failure",
+                        failureKind: "unavailable_api",
+                        detail: `Control9 verification API returned HTTP ${response.status} for deploy verification submission.`,
+                    };
+                }
+                try {
+                    const payload = (await response.json());
+                    const verification = (0, normalize_1.normalizeDeployVerification)(payload);
+                    return { status: "success", verification };
+                }
+                catch (error) {
+                    const detail = error instanceof Error
+                        ? error.message
+                        : "Control9 verification response could not be normalized.";
+                    return {
+                        status: "failure",
+                        failureKind: "malformed_response",
+                        detail,
+                    };
+                }
+            }
+            catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                if (attempt < this.maxAttempts) {
+                    await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
+                    continue;
+                }
+            }
+        }
+        if (lastError && (0, submission_1.isTimeoutError)(lastError)) {
+            return {
+                status: "failure",
+                failureKind: "timeout",
+                detail: lastError.message,
+            };
+        }
+        return {
+            status: "failure",
+            failureKind: "unavailable_api",
+            detail: `Control9 verification API submission failed after ${this.maxAttempts} attempts: ${lastError?.message ?? "unknown error"}.`,
+        };
+    }
+    async submitVerification(request) {
+        const result = await this.submitVerificationWithOutcome(request);
+        if (result.status === "failure") {
+            throw new submission_2.VerificationSubmissionError(result.failureKind, result.detail ?? `Control9 verification submission failed (${result.failureKind}).`, result.detail);
+        }
+        return result.verification;
+    }
+}
+exports.Control9VerificationClient = Control9VerificationClient;
+function createVerificationClient(options) {
+    return new Control9VerificationClient(options);
+}
+
+
+/***/ }),
+
+/***/ 9964:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeDeployVerification = normalizeDeployVerification;
+const types_1 = __nccwpck_require__(8522);
+const ALLOWED_VERIFICATION_STATUSES = new Set([
+    "verified",
+    "fingerprint_mismatch",
+    "no_approved_baseline",
+]);
+function readStringField(response, camelCase, snakeCase) {
+    const camelValue = response[camelCase];
+    if (typeof camelValue === "string" && camelValue.trim()) {
+        return camelValue.trim();
+    }
+    const snakeValue = response[snakeCase];
+    if (typeof snakeValue === "string" && snakeValue.trim()) {
+        return snakeValue.trim();
+    }
+    return undefined;
+}
+function normalizeDeployVerification(response) {
+    const verificationId = readStringField(response, "verificationId", "verification_id");
+    const verificationStatusRaw = readStringField(response, "verificationStatus", "verification_status");
+    if (!verificationId) {
+        throw new types_1.Control9ActionError("Control9 verification response is missing verification id.");
+    }
+    if (!verificationStatusRaw) {
+        throw new types_1.Control9ActionError("Control9 verification response is missing verification status.");
+    }
+    const normalizedStatus = verificationStatusRaw.toLowerCase().replace(/-/g, "_");
+    if (!ALLOWED_VERIFICATION_STATUSES.has(normalizedStatus)) {
+        throw new types_1.Control9ActionError(`Unsupported Control9 verification status "${verificationStatusRaw}".`);
+    }
+    const verificationStatus = normalizedStatus;
+    const decisionId = readStringField(response, "decisionId", "decision_id");
+    const expectedFingerprint = readStringField(response, "expectedFingerprint", "expected_fingerprint");
+    const actualFingerprint = readStringField(response, "actualFingerprint", "actual_fingerprint");
+    const reason = readStringField(response, "reason", "reason");
+    if (verificationStatus === "no_approved_baseline" && !reason) {
+        throw new types_1.Control9ActionError("Control9 verification response is missing reason text for no_approved_baseline.");
+    }
+    return {
+        verificationId,
+        verificationStatus,
+        decisionId,
+        expectedFingerprint,
+        actualFingerprint,
+        reason,
+    };
+}
+
+
+/***/ }),
+
+/***/ 4467:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.VerificationSubmissionError = void 0;
+class VerificationSubmissionError extends Error {
+    failureKind;
+    detail;
+    constructor(failureKind, message, detail) {
+        super(message);
+        this.name = "VerificationSubmissionError";
+        this.failureKind = failureKind;
+        this.detail = detail;
+    }
+}
+exports.VerificationSubmissionError = VerificationSubmissionError;
 
 
 /***/ }),

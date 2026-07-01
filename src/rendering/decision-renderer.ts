@@ -9,12 +9,14 @@ import {
   buildBodyMarkdown,
   buildErrorDetailLines,
   buildFingerprintMismatchSummary,
+  buildNoApprovedBaselineSummary,
   buildPolicyDecisionSummary,
   buildPolicyDetailLines,
   buildRedactionAppliedSummary,
   buildMalformedResponseSummary,
   buildTimeoutSummary,
   buildUnavailableApiSummary,
+  buildVerifiedSummary,
   formatFollowUpAction,
   formatRedactionStatus,
 } from "./templates";
@@ -35,11 +37,22 @@ function resolveBlockingBehavior(
     return { isAdvisory: false, blocksWorkflow: true };
   }
 
+  if (outcomeKind === "verified") {
+    return { isAdvisory: false, blocksWorkflow: false };
+  }
+
+  if (outcomeKind === "fingerprint_mismatch" || outcomeKind === "no_approved_baseline") {
+    if (runtimeMode === "shadow") {
+      return { isAdvisory: true, blocksWorkflow: false };
+    }
+    return { isAdvisory: false, blocksWorkflow: true };
+  }
+
   if (runtimeMode === "shadow") {
     return { isAdvisory: outcomeKind === "require_approval", blocksWorkflow: false };
   }
 
-  if (outcomeKind === "deny" || outcomeKind === "fingerprint_mismatch") {
+  if (outcomeKind === "deny") {
     return { isAdvisory: false, blocksWorkflow: true };
   }
 
@@ -71,6 +84,10 @@ export function renderDecisionFeedback(input: DecisionRenderInput): RenderedDeci
       return renderRedactionApplied(input);
     case "fingerprint_mismatch":
       return renderFingerprintMismatch(input);
+    case "verified":
+      return renderVerified(input);
+    case "no_approved_baseline":
+      return renderNoApprovedBaseline(input);
   }
 }
 
@@ -221,8 +238,10 @@ function renderFingerprintMismatch(
   const summary = buildFingerprintMismatchSummary(
     input.expectedFingerprint,
     input.actualFingerprint,
+    input.runtimeMode,
   );
   const detailLines = buildErrorDetailLines(outcomeKind, input);
+  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
 
   return {
     outcomeKind,
@@ -232,12 +251,65 @@ function renderFingerprintMismatch(
     detailLines,
     bodyMarkdown: buildBodyMarkdown(template.title, summary, detailLines),
     annotationMessage: `${template.label} — ${summary}`,
-    isAdvisory: false,
-    blocksWorkflow: true,
+    ...behavior,
     metadata: {
       targetEnvironment: input.targetEnvironment,
       expectedFingerprint: input.expectedFingerprint,
       actualFingerprint: input.actualFingerprint,
+    },
+  };
+}
+
+function renderVerified(
+  input: Extract<DecisionRenderInput, { kind: "verified" }>,
+): RenderedDecisionFeedback {
+  const outcomeKind = "verified";
+  const template = OUTCOME_TEMPLATES[outcomeKind];
+  const summary = buildVerifiedSummary(input.artifactFingerprint, input.runtimeMode);
+  const detailLines = buildErrorDetailLines(outcomeKind, input);
+  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+
+  return {
+    outcomeKind,
+    label: template.label,
+    title: template.title,
+    summary,
+    detailLines,
+    bodyMarkdown: buildBodyMarkdown(template.title, summary, detailLines),
+    annotationMessage: `${template.label} — ${summary}`,
+    ...behavior,
+    metadata: {
+      verificationId: input.verificationId,
+      decisionId: input.decisionId,
+      artifactFingerprint: input.artifactFingerprint,
+      targetEnvironment: input.targetEnvironment,
+    },
+  };
+}
+
+function renderNoApprovedBaseline(
+  input: Extract<DecisionRenderInput, { kind: "no_approved_baseline" }>,
+): RenderedDecisionFeedback {
+  const outcomeKind = "no_approved_baseline";
+  const template = OUTCOME_TEMPLATES[outcomeKind];
+  const summary = buildNoApprovedBaselineSummary(input.reason, input.runtimeMode);
+  const detailLines = buildErrorDetailLines(outcomeKind, input);
+  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+
+  return {
+    outcomeKind,
+    label: template.label,
+    title: template.title,
+    summary,
+    detailLines,
+    bodyMarkdown: buildBodyMarkdown(template.title, summary, detailLines),
+    annotationMessage: `${template.label} — ${summary}`,
+    ...behavior,
+    metadata: {
+      verificationId: input.verificationId,
+      decisionId: input.decisionId,
+      artifactFingerprint: input.artifactFingerprint,
+      targetEnvironment: input.targetEnvironment,
     },
   };
 }

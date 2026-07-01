@@ -3,10 +3,13 @@ import path from "node:path";
 
 import type { ActionEnvelope, PolicyDecision } from "./envelope/types";
 import type { PolicySubmissionResult } from "./policy/submission";
+import type { DeployVerification } from "./verification/types";
+import type { VerificationSubmissionResult } from "./verification/submission";
 import type {
   ActionInputs,
   ActionResult,
   OutputDecisionKind,
+  OutputVerificationStatus,
   RoutedCommand,
   ValidationSummary,
 } from "./types";
@@ -33,6 +36,8 @@ export function buildValidationSummary(
     decisionId: decision.decisionId,
     decisionKind: decision.decisionKind,
     decisionReason: decision.reason,
+    verificationId: "",
+    verificationStatus: "",
     redactionCount: envelope.redactionReport.totalRedactions,
     status: "submitted",
     message: decision.reason,
@@ -62,6 +67,69 @@ export function buildFailureValidationSummary(
     decisionId: "",
     decisionKind: submission.failureKind,
     decisionReason: summaryMessage,
+    verificationId: "",
+    verificationStatus: "",
+    redactionCount: envelope.redactionReport.totalRedactions,
+    status: "submission_failed",
+    message: summaryMessage,
+  };
+}
+
+export function buildVerificationValidationSummary(
+  inputs: ActionInputs,
+  routed: RoutedCommand,
+  artifactFingerprint: string,
+  envelope: ActionEnvelope,
+  verification: DeployVerification,
+): ValidationSummary {
+  return {
+    mode: inputs.mode,
+    tenantId: inputs.tenantId,
+    targetEnvironment: inputs.targetEnvironment,
+    requestedAuthority: inputs.requestedAuthority,
+    iacTool: routed.iacTool,
+    command: routed.command,
+    artifactFingerprint,
+    artifactPaths: routed.artifactPaths,
+    redactionProfile: inputs.redactionProfile ?? "standard",
+    envelopeId: envelope.envelopeId,
+    correlationId: envelope.correlationId,
+    decisionId: verification.decisionId ?? "",
+    decisionKind: "",
+    decisionReason: verification.reason ?? "",
+    verificationId: verification.verificationId,
+    verificationStatus: verification.verificationStatus,
+    redactionCount: envelope.redactionReport.totalRedactions,
+    status: "submitted",
+    message: verification.reason ?? verification.verificationStatus,
+  };
+}
+
+export function buildVerificationFailureValidationSummary(
+  inputs: ActionInputs,
+  routed: RoutedCommand,
+  artifactFingerprint: string,
+  envelope: ActionEnvelope,
+  submission: Extract<VerificationSubmissionResult, { status: "failure" }>,
+  summaryMessage: string,
+): ValidationSummary {
+  return {
+    mode: inputs.mode,
+    tenantId: inputs.tenantId,
+    targetEnvironment: inputs.targetEnvironment,
+    requestedAuthority: inputs.requestedAuthority,
+    iacTool: routed.iacTool,
+    command: routed.command,
+    artifactFingerprint,
+    artifactPaths: routed.artifactPaths,
+    redactionProfile: inputs.redactionProfile ?? "standard",
+    envelopeId: envelope.envelopeId,
+    correlationId: envelope.correlationId,
+    decisionId: "",
+    decisionKind: "",
+    decisionReason: summaryMessage,
+    verificationId: "",
+    verificationStatus: submission.failureKind,
     redactionCount: envelope.redactionReport.totalRedactions,
     status: "submission_failed",
     message: summaryMessage,
@@ -83,14 +151,20 @@ export function buildActionResult(
   summaryPath: string,
   artifactFingerprint: string,
   envelope: ActionEnvelope,
-  decisionKind: OutputDecisionKind,
-  decisionId = "",
+  options: {
+    decisionKind?: OutputDecisionKind | "";
+    decisionId?: string;
+    verificationId?: string;
+    verificationStatus?: OutputVerificationStatus | "";
+  },
 ): ActionResult {
   return {
     envelopeId: envelope.envelopeId,
     artifactFingerprint,
-    decisionId,
-    decisionKind,
+    decisionId: options.decisionId ?? "",
+    decisionKind: options.decisionKind ?? "",
+    verificationId: options.verificationId ?? "",
+    verificationStatus: options.verificationStatus ?? "",
     summaryPath,
   };
 }

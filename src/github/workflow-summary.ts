@@ -7,12 +7,16 @@ import { publishPrComment, type PrCommentState } from "./pr-comment";
 
 export const SUMMARY_ENV_VAR = "GITHUB_STEP_SUMMARY";
 export const SUMMARY_SECTION_HEADING = "Control9 Policy Decision";
+export const DEPLOY_VERIFICATION_SECTION_HEADING = "Control9 Deploy Verification";
+
+export type WorkflowFeedbackPresentation = "policy" | "deploy-verification";
 
 export type { PrCommentState };
 
 export interface PublishWorkflowFeedbackInput {
   rendered: RenderedDecisionFeedback;
   summaryPath?: string;
+  presentation?: WorkflowFeedbackPresentation;
 }
 
 export interface WorkflowFeedbackResult {
@@ -28,13 +32,29 @@ export interface WorkflowFeedbackDependencies {
   info: (message: string) => void;
 }
 
-export function buildWorkflowSummarySection(rendered: RenderedDecisionFeedback): string {
-  return [`## ${SUMMARY_SECTION_HEADING}`, "", rendered.bodyMarkdown].join("\n");
+export function resolveSummarySectionHeading(
+  presentation: WorkflowFeedbackPresentation = "policy",
+): string {
+  return presentation === "deploy-verification"
+    ? DEPLOY_VERIFICATION_SECTION_HEADING
+    : SUMMARY_SECTION_HEADING;
 }
 
-export function buildLogFallbackLines(rendered: RenderedDecisionFeedback): string[] {
+export function buildWorkflowSummarySection(
+  rendered: RenderedDecisionFeedback,
+  presentation: WorkflowFeedbackPresentation = "policy",
+): string {
+  const heading = resolveSummarySectionHeading(presentation);
+  return [`## ${heading}`, "", rendered.bodyMarkdown].join("\n");
+}
+
+export function buildLogFallbackLines(
+  rendered: RenderedDecisionFeedback,
+  presentation: WorkflowFeedbackPresentation = "policy",
+): string[] {
+  const heading = resolveSummarySectionHeading(presentation);
   return [
-    `## ${SUMMARY_SECTION_HEADING}`,
+    `## ${heading}`,
     rendered.label,
     rendered.summary,
     ...rendered.detailLines.map((line) => `- ${line}`),
@@ -89,7 +109,8 @@ export async function publishWorkflowFeedback(
   deps: Partial<WorkflowFeedbackDependencies> = {},
 ): Promise<WorkflowFeedbackResult> {
   const resolved = { ...defaultDependencies(), ...deps };
-  const sectionMarkdown = buildWorkflowSummarySection(input.rendered);
+  const presentation = input.presentation ?? "policy";
+  const sectionMarkdown = buildWorkflowSummarySection(input.rendered, presentation);
 
   emitDecisionAnnotation(input.rendered, resolved);
 
@@ -98,7 +119,7 @@ export async function publishWorkflowFeedback(
 
   if (!summaryWritten) {
     usedLogFallback = true;
-    for (const line of buildLogFallbackLines(input.rendered)) {
+    for (const line of buildLogFallbackLines(input.rendered, presentation)) {
       resolved.info(line);
     }
     if (input.summaryPath) {

@@ -1,0 +1,8 @@
+{
+  "httpStatus": 200,
+  "body": {
+    "verification_id": "verify-malformed-001"
+  },
+  "expectedFailureKind": "malformed_response",
+  "expectedDetailPattern": "missing verification status"
+}

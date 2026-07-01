@@ -15,7 +15,10 @@ const coreMocks = vi.hoisted(() => ({
 vi.mock("@actions/core", () => coreMocks);
 
 import { runAction } from "../src/index";
-import { SUMMARY_SECTION_HEADING } from "../src/github/workflow-summary";
+import {
+  DEPLOY_VERIFICATION_SECTION_HEADING,
+  SUMMARY_SECTION_HEADING,
+} from "../src/github/workflow-summary";
 import { OUTCOME_TEMPLATES } from "../src/rendering/templates";
 import { Control9ActionError } from "../src/types";
 
@@ -29,6 +32,22 @@ interface RenderingFixture {
 }
 
 interface MalformedOutcomeFixture {
+  httpStatus: number;
+  body: Record<string, unknown>;
+  expectedFailureKind: string;
+  expectedDetailPattern: string;
+}
+
+interface VerificationFixture {
+  verificationId: string;
+  verificationStatus: string;
+  decisionId?: string;
+  expectedFingerprint?: string;
+  actualFingerprint?: string;
+  reason?: string;
+}
+
+interface MalformedVerificationFixture {
   httpStatus: number;
   body: Record<string, unknown>;
   expectedFailureKind: string;
@@ -59,6 +78,18 @@ const malformedFixture = JSON.parse(
 const unavailableFixture = JSON.parse(
   readFileSync("fixtures/outcomes/unavailable-api-exhaustion.json", "utf8"),
 ) as UnavailableOutcomeFixture;
+const verifiedFixture = JSON.parse(
+  readFileSync("fixtures/rendering/verified-response.json", "utf8"),
+) as VerificationFixture;
+const fingerprintMismatchFixture = JSON.parse(
+  readFileSync("fixtures/rendering/fingerprint-mismatch-response.json", "utf8"),
+) as VerificationFixture;
+const noApprovedBaselineFixture = JSON.parse(
+  readFileSync("fixtures/rendering/no-approved-baseline-response.json", "utf8"),
+) as VerificationFixture;
+const malformedVerificationFixture = JSON.parse(
+  readFileSync("fixtures/outcomes/malformed-verification-response.json", "utf8"),
+) as MalformedVerificationFixture;
 
 const UNSAFE_PATTERNS = [
   /BEGIN RSA PRIVATE KEY/,
@@ -137,6 +168,33 @@ describe("runAction outcome integration", () => {
     );
   }
 
+  function mockVerificationSuccess(fixture: VerificationFixture): void {
+    fetchMock.mockResolvedValue(
+      Response.json(
+        {
+          verification_id: fixture.verificationId,
+          verification_status: fixture.verificationStatus,
+          ...(fixture.decisionId ? { decision_id: fixture.decisionId } : {}),
+          ...(fixture.expectedFingerprint
+            ? { expected_fingerprint: fixture.expectedFingerprint }
+            : {}),
+          ...(fixture.actualFingerprint
+            ? { actual_fingerprint: fixture.actualFingerprint }
+            : {}),
+          ...(fixture.reason ? { reason: fixture.reason } : {}),
+        },
+        { status: 200 },
+      ),
+    );
+  }
+
+  function configureDeployVerificationInputs(): void {
+    process.env.INPUT_COMMAND = "deploy-verification";
+    process.env.INPUT_REQUESTED_AUTHORITY = "apply";
+    process.env.INPUT_IAC_TOOL = "terraform";
+    process.env.INPUT_ARTIFACT_PATHS = "fixtures/terraform/plan.json";
+  }
+
   function mockUnavailableApiExhaustion(): void {
     fetchMock.mockResolvedValue(
       new Response("service unavailable", { status: unavailableFixture.httpStatus }),
@@ -146,6 +204,14 @@ describe("runAction outcome integration", () => {
   function mockMalformedPolicyResponse(): void {
     fetchMock.mockResolvedValue(
       Response.json(malformedFixture.body, { status: malformedFixture.httpStatus }),
+    );
+  }
+
+  function mockMalformedVerificationResponse(): void {
+    fetchMock.mockResolvedValue(
+      Response.json(malformedVerificationFixture.body, {
+        status: malformedVerificationFixture.httpStatus,
+      }),
     );
   }
 
@@ -336,5 +402,92 @@ describe("runAction outcome integration", () => {
 
     expect(getOutput("decision-kind")).not.toBe("allow");
     expect(getOutput("decision-kind")).toBe("deny");
+  });
+
+  describe("deploy-verification command", () => {
+    beforeEach(() => {
+      configureDeployVerificationInputs();
+    });
+
+    it("calls the deploy verification API instead of the policy API", async () => {
+      mockVerificationSuccess(verifiedFixture);
+
+      await expectRunCompletes();
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/v1/deploy-verifications");
+      expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain("/v1/action-envelopes");
+    });
+
+    it.each([
+      ["verified", verifiedFixture],
+      ["fingerprint_mismatch", fingerprintMismatchFixture],
+      ["no_approved_baseline", noApprovedBaselineFixture],
+    ] as const)(
+      "completes successful %s verification in shadow mode with deploy verification feedback",
+      async (_label, fixture) => {
+        process.env.INPUT_MODE = "shadow";
+        mockVerificationSuccess(fixture);
+
+        await expectRunCompletes();
+
+        expect(getOutput("verification-status")).toBe(fixture.verificationStatus);
+        expect(getOutput("verification-id")).toBe(fixture.verificationId);
+        expect(getOutput("decision-kind")).toBe("");
+
+        const summaryContent = readFileSync(stepSummaryPath, "utf8");
+        expect(summaryContent).toContain(DEPLOY_VERIFICATION_SECTION_HEADING);
+        expect(summaryContent).not.toContain(SUMMARY_SECTION_HEADING);
+      },
+    );
+
+    it.each([
+      ["fingerprint_mismatch", fingerprintMismatchFixture, /does not match the approved fingerprint/i],
+      ["no_approved_baseline", noApprovedBaselineFixture, /No approved fingerprint exists/i],
+    ] as const)(
+      "blocks enforce-mode %s verification after publishing workflow feedback",
+      async (_label, fixture, summaryPattern) => {
+        process.env.INPUT_MODE = "enforce";
+        process.env.INPUT_TARGET_ENVIRONMENT = "production";
+        mockVerificationSuccess(fixture);
+
+        await expectRunBlocks(summaryPattern);
+
+        expect(getOutput("verification-status")).toBe(fixture.verificationStatus);
+        expect(getOutput("summary-written")).toBe("true");
+        expect(coreMocks.warning).toHaveBeenCalled();
+      },
+    );
+
+    it("does not block fingerprint mismatch or no approved baseline in shadow mode", async () => {
+      for (const fixture of [fingerprintMismatchFixture, noApprovedBaselineFixture]) {
+        coreMocks.setOutput.mockClear();
+        coreMocks.warning.mockClear();
+        writeFileSync(stepSummaryPath, "", "utf8");
+        process.env.INPUT_MODE = "shadow";
+        mockVerificationSuccess(fixture);
+
+        await expectRunCompletes();
+
+        expect(getOutput("verification-status")).toBe(fixture.verificationStatus);
+        expect(coreMocks.notice).toHaveBeenCalled();
+        expect(coreMocks.warning).not.toHaveBeenCalled();
+      }
+    });
+
+    it.each(["shadow", "enforce"] as const)(
+      "always blocks on malformed verification responses in %s mode",
+      async (mode) => {
+        process.env.INPUT_MODE = mode;
+        mockMalformedVerificationResponse();
+
+        await expectRunBlocks(/missing verification status/i);
+
+        expect(getOutput("verification-status")).toBe(
+          malformedVerificationFixture.expectedFailureKind,
+        );
+        expect(getOutput("verification-id")).toBe("");
+      },
+    );
   });
 });

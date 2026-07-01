@@ -3,14 +3,21 @@ import type { RuntimeMode } from "../types";
 
 export type PolicyDecisionOutcomeKind = "allow" | "deny" | "require_approval" | "observe";
 
+export type VerificationOutcomeKind =
+  | "verified"
+  | "fingerprint_mismatch"
+  | "no_approved_baseline";
+
 export type ErrorOutcomeKind =
   | "timeout"
   | "unavailable_api"
   | "malformed_response"
-  | "redaction_applied"
-  | "fingerprint_mismatch";
+  | "redaction_applied";
 
-export type RenderOutcomeKind = PolicyDecisionOutcomeKind | ErrorOutcomeKind;
+export type RenderOutcomeKind =
+  | PolicyDecisionOutcomeKind
+  | VerificationOutcomeKind
+  | ErrorOutcomeKind;
 
 export interface PolicyDecisionRenderInput {
   kind: "policy_decision";
@@ -55,6 +62,26 @@ export interface FingerprintMismatchRenderInput {
   expectedFingerprint?: string;
   actualFingerprint?: string;
   targetEnvironment?: string;
+  runtimeMode?: RuntimeMode;
+}
+
+export interface VerifiedRenderInput {
+  kind: "verified";
+  verificationId: string;
+  decisionId?: string;
+  artifactFingerprint?: string;
+  targetEnvironment?: string;
+  runtimeMode?: RuntimeMode;
+}
+
+export interface NoApprovedBaselineRenderInput {
+  kind: "no_approved_baseline";
+  verificationId: string;
+  reason: string;
+  decisionId?: string;
+  artifactFingerprint?: string;
+  targetEnvironment?: string;
+  runtimeMode?: RuntimeMode;
 }
 
 export type DecisionRenderInput =
@@ -63,10 +90,13 @@ export type DecisionRenderInput =
   | UnavailableApiRenderInput
   | MalformedResponseRenderInput
   | RedactionAppliedRenderInput
-  | FingerprintMismatchRenderInput;
+  | FingerprintMismatchRenderInput
+  | VerifiedRenderInput
+  | NoApprovedBaselineRenderInput;
 
 export interface RenderedDecisionMetadata {
   decisionId?: string;
+  verificationId?: string;
   policyVersion?: string;
   artifactFingerprint?: string;
   targetEnvironment?: string;
