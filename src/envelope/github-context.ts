@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { GitHubWorkflowContext } from "./types";
+import type { WorkflowContext } from "./types";
 
 function readEnv(name: string, fallback?: string): string {
   const value = process.env[name]?.trim();
@@ -27,7 +27,7 @@ function parsePullRequestNumber(): number | undefined {
   return undefined;
 }
 
-export function readGitHubWorkflowContext(): GitHubWorkflowContext {
+export function readGitHubWorkflowContext(): WorkflowContext {
   const owner = readEnv("GITHUB_REPOSITORY_OWNER", "local-owner");
   const name = readEnv("GITHUB_REPOSITORY", `${owner}/local-repo`).split("/").pop() || "local-repo";
   const fullName = readEnv("GITHUB_REPOSITORY", `${owner}/${name}`);

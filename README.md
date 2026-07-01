@@ -118,6 +118,53 @@ jobs:
 
 Shadow mode keeps the workflow non-blocking while Control9 records what would have happened. Replace `@v0` with a pinned release tag when you adopt the action in production repositories.
 
+## GitLab CI Component (Shadow Mode)
+
+The GitLab install surface is a CI/CD component at `templates/control9-assessment/template.yml`. Pipelines `include: remote` the tagged template from GitHub and pass the same logical inputs as the GitHub Action. The component job downloads the pinned release bundle, exports `INPUT_*` environment variables, sets `CONTROL9_PROVIDER=gitlab`, and runs the GitLab runner entrypoint.
+
+Pin an exact semver tag in production for both the remote include URL and the `control9-version` input. Store `CONTROL9_SIGNING_SECRET` (and other secrets) as masked, protected CI/CD variables in your GitLab project or group.
+
+```yaml
+stages:
+  - plan
+  - assess
+
+include:
+  - remote: "https://raw.githubusercontent.com/alto9/control9-integrations/v0.1.0/templates/control9-assessment/template.yml"
+    inputs:
+      mode: shadow
+      control9-api-url: $CONTROL9_API_URL
+      tenant-id: $CONTROL9_TENANT_ID
+      signing-secret: $CONTROL9_SIGNING_SECRET
+      target-environment: staging
+      requested-authority: plan
+      iac-tool: terraform
+      command: plan
+      artifact-paths: infra/plan.json
+      control9-version: v0.1.0
+      stage: assess
+
+terraform-plan:
+  stage: plan
+  image:
+    name: hashicorp/terraform:1.9
+    entrypoint: [""]
+  script:
+    - cd infra
+    - terraform init -backend=false
+    - terraform plan -out=tfplan
+    - terraform show -json tfplan > plan.json
+  artifacts:
+    paths:
+      - infra/plan.json
+```
+
+See [`examples/gitlab-shadow-assessment.yml`](examples/gitlab-shadow-assessment.yml) for a copy-pasteable pipeline with placeholder variable names.
+
+When Alto9 publishes a GitLab.com catalog mirror of this repository, the same component inputs and behavior apply with `include: component:` instead of `include: remote`. Input names do not change between consumption paths.
+
+Release tags publish `control9-bundle.tar.gz` (Node bundles under `dist/`) alongside `action.yml` and the component template. Maintainers run `npm run package:release` locally before tagging, or rely on the release workflow on tag push.
+
 ## Local Development
 
 Prerequisites:
@@ -134,7 +181,7 @@ npm run lint
 npm run build
 ```
 
-The build bundles `src/index.ts` into `dist/index.js`, which `action.yml` references for GitHub Actions execution.
+The build bundles `src/index.ts` into `dist/index.js` for GitHub Actions and `src/gitlab/index.ts` into `dist/gitlab/index.js` for GitLab CI. Run `npm run package:release` to produce `control9-bundle.tar.gz` for semver release assets.
 
 Fixture directories under `fixtures/` support upcoming parser, envelope schema, and redaction work:
 
