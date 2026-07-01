@@ -12,7 +12,8 @@ This doc describes how information is presented and distinguished for users.
 
 For the GitHub Action path in this milestone:
 
-- **Workflow step summary:** Append a markdown section headed `Control9 Policy Decision` containing the rendered outcome title, summary, and bullet detail lines.
+- **Workflow step summary (policy commands):** Append a markdown section headed `Control9 Policy Decision` containing the rendered outcome title, summary, and bullet detail lines.
+- **Workflow step summary (deploy verification):** Append a markdown section headed `Control9 Deploy Verification` for `command: deploy-verification` outcomes (`verified`, `fingerprint_mismatch`, `no_approved_baseline`, and verification API failure outcomes).
 - **Annotations:** Non-blocking outcomes emit a GitHub notice annotation; blocking outcomes emit a warning annotation. The annotation title is the outcome label; the message is `{label} — {summary}`.
 - **Log fallback:** When `GITHUB_STEP_SUMMARY` is unavailable, emit the same content as structured log lines.
 - **PR comments:** Publish rendered markdown through the PR comment helper when the workflow context includes an open pull request; comment create/update policy for multi-run workflows remains a later presentation decision.

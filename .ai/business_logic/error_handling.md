@@ -44,3 +44,15 @@ These occur before envelope submission and remain immediate action errors withou
 - Invalid action inputs.
 
 Unsupported repository configuration that prevents trustworthy evidence collection is a local action error with an actionable message. It is not retried against the policy API.
+
+## Deploy verification outcomes
+
+When `command` is `deploy-verification`, outcomes come from the verification API rather than policy decision kinds:
+
+| Verification status | Shadow mode | Enforce mode |
+|---------------------|-------------|--------------|
+| `verified` | Job continues | Job continues |
+| `fingerprint_mismatch` | Job continues (advisory) | Job fails |
+| `no_approved_baseline` | Job continues (advisory) | Job fails |
+
+Verification API transport and malformed-response handling mirrors the policy API failure table above (`unavailable_api`, `timeout`, `malformed_response` with the same mode matrix). Rendered feedback uses deploy verification presentation headings documented in `interface/presentation.md`.
