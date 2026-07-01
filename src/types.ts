@@ -6,6 +6,10 @@ export type CommandCategory = "plan" | "synth" | "diff" | "deploy-verification";
 
 export type DecisionKind = "allow" | "deny" | "require_approval" | "observe" | "pending";
 
+export type FailureDecisionKind = "unavailable_api" | "timeout" | "malformed_response";
+
+export type OutputDecisionKind = Exclude<DecisionKind, "pending"> | FailureDecisionKind;
+
 export interface ActionInputs {
   mode: RuntimeMode;
   control9ApiUrl: string;
@@ -41,10 +45,10 @@ export interface ValidationSummary {
   envelopeId: string;
   correlationId: string;
   decisionId: string;
-  decisionKind: DecisionKind;
+  decisionKind: OutputDecisionKind;
   decisionReason: string;
   redactionCount: number;
-  status: "submitted";
+  status: "submitted" | "submission_failed";
   message: string;
 }
 
@@ -52,7 +56,7 @@ export interface ActionResult {
   envelopeId: string;
   artifactFingerprint: string;
   decisionId: string;
-  decisionKind: DecisionKind;
+  decisionKind: OutputDecisionKind;
   summaryPath: string;
 }
 

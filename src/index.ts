@@ -3,13 +3,14 @@ import * as core from "@actions/core";
 import { buildSignedActionEnvelope } from "./envelope/build";
 import { publishWorkflowFeedback } from "./github/workflow-summary";
 import { readActionInputsFromEnv } from "./inputs";
+import { routePolicySubmissionOutcome } from "./outcomes/route";
 import {
   buildActionResult,
+  buildFailureValidationSummary,
   buildValidationSummary,
   writeSummaryFile,
 } from "./outputs";
 import { createPolicyClient } from "./policy/client";
-import { renderDecisionFeedback } from "./rendering/decision-renderer";
 import { fingerprintArtifacts, routeCommand } from "./routing";
 import { Control9ActionError } from "./types";
 
@@ -19,26 +20,42 @@ export async function runAction(): Promise<void> {
   const artifactFingerprint = fingerprintArtifacts(routed.resolvedArtifactPaths);
   const envelope = buildSignedActionEnvelope(inputs, routed);
   const policyClient = createPolicyClient({ apiBaseUrl: inputs.control9ApiUrl });
-  const decision = await policyClient.submitEnvelope({ envelope });
-  const summary = buildValidationSummary(
-    inputs,
-    routed,
-    artifactFingerprint,
-    envelope,
-    decision,
-  );
-  const summaryPath = writeSummaryFile(summary);
-  const result = buildActionResult(summaryPath, artifactFingerprint, envelope, decision);
-  const rendered = renderDecisionFeedback({
-    kind: "policy_decision",
-    decision,
+  const submission = await policyClient.submitEnvelopeWithOutcome({ envelope });
+  const routedOutcome = routePolicySubmissionOutcome({
+    submission,
     artifactFingerprint,
     targetEnvironment: inputs.targetEnvironment,
     redactionReport: envelope.redactionReport,
     runtimeMode: inputs.mode,
   });
+
+  const summary =
+    submission.status === "success"
+      ? buildValidationSummary(
+          inputs,
+          routed,
+          artifactFingerprint,
+          envelope,
+          submission.decision,
+        )
+      : buildFailureValidationSummary(
+          inputs,
+          routed,
+          artifactFingerprint,
+          envelope,
+          submission,
+          routedOutcome.summaryMessage,
+        );
+  const summaryPath = writeSummaryFile(summary);
+  const result = buildActionResult(
+    summaryPath,
+    artifactFingerprint,
+    envelope,
+    routedOutcome.decisionKindOutput,
+    submission.status === "success" ? submission.decision.decisionId : "",
+  );
   const feedback = await publishWorkflowFeedback({
-    rendered,
+    rendered: routedOutcome.rendered,
     summaryPath,
   });
 
@@ -53,11 +70,11 @@ export async function runAction(): Promise<void> {
   core.info(
     `Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${result.envelopeId} in ${inputs.mode} mode.`,
   );
-  core.info(`Decision ${result.decisionKind}: ${summary.decisionReason}`);
+  core.info(`Outcome ${result.decisionKind}: ${summary.message}`);
   core.info(`Summary written to ${summaryPath}.`);
 
-  if (rendered.blocksWorkflow) {
-    throw new Control9ActionError(rendered.summary);
+  if (routedOutcome.blocksWorkflow) {
+    throw new Control9ActionError(routedOutcome.rendered.summary);
   }
 }
 

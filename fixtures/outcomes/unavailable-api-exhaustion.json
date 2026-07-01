@@ -1,0 +1,6 @@
+{
+  "description": "Simulates bounded retry exhaustion when the policy API returns retryable HTTP 503 responses.",
+  "httpStatus": 503,
+  "attempts": 3,
+  "expectedFailureKind": "unavailable_api"
+}

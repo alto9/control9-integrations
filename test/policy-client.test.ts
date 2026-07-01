@@ -4,7 +4,7 @@ import { parseActionInputs } from "../src/inputs";
 import { buildSignedActionEnvelope } from "../src/envelope/build";
 import { routeCommand } from "../src/routing";
 import { Control9PolicyClient } from "../src/policy/client";
-import { Control9ActionError } from "../src/types";
+import { PolicySubmissionError } from "../src/policy/submission";
 import type { GitHubWorkflowContext } from "../src/envelope/types";
 
 const githubContext: GitHubWorkflowContext = {
@@ -107,17 +107,41 @@ describe("Control9PolicyClient", () => {
       fetchImpl,
     });
 
-    await expect(
-      client.submitEnvelope({
-        envelope: {
-          envelopeId: "a".repeat(64),
-        } as never,
-      }),
-    ).rejects.toThrow(Control9ActionError);
+    const result = await client.submitEnvelopeWithOutcome({
+      envelope: {
+        envelopeId: "a".repeat(64),
+      } as never,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.failureKind).toBe("malformed_response");
+    }
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry client configuration errors", async () => {
+    const fetchImpl = vi.fn(async () => new Response("bad request", { status: 400 }));
+    const client = new Control9PolicyClient({
+      apiBaseUrl: "https://api.control9.example",
+      fetchImpl,
+    });
+
+    const result = await client.submitEnvelopeWithOutcome({
+      envelope: {
+        envelopeId: "a".repeat(64),
+      } as never,
+    });
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.failureKind).toBe("unavailable_api");
+      expect(result.detail).toMatch(/HTTP 400/);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws PolicySubmissionError from submitEnvelope on failure outcomes", async () => {
     const fetchImpl = vi.fn(async () => new Response("bad request", { status: 400 }));
     const client = new Control9PolicyClient({
       apiBaseUrl: "https://api.control9.example",
@@ -130,7 +154,6 @@ describe("Control9PolicyClient", () => {
           envelopeId: "a".repeat(64),
         } as never,
       }),
-    ).rejects.toThrow(/HTTP 400/);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow(PolicySubmissionError);
   });
 });

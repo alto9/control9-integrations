@@ -73,7 +73,13 @@ describe("outputs", () => {
         decision,
       );
       const summaryPath = writeSummaryFile(summary);
-      const result = buildActionResult(summaryPath, fingerprint, envelope, decision);
+      const result = buildActionResult(
+        summaryPath,
+        fingerprint,
+        envelope,
+        decision.decisionKind,
+        decision.decisionId,
+      );
 
       expect(result.decisionKind).toBe("observe");
       expect(result.envelopeId).toBe(envelope.envelopeId);

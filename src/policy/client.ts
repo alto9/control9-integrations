@@ -1,7 +1,10 @@
-import type { ActionEnvelope } from "../envelope/types";
-import { Control9ActionError } from "../types";
-import type { PolicyDecision } from "../envelope/types";
+import type { ActionEnvelope, PolicyDecision } from "../envelope/types";
 import { normalizePolicyDecision } from "./normalize";
+import {
+  PolicySubmissionError,
+  type PolicySubmissionResult,
+  isTimeoutError,
+} from "./submission";
 
 export interface PolicyClientOptions {
   apiBaseUrl: string;
@@ -45,6 +48,21 @@ export class Control9PolicyClient {
   }
 
   async submitEnvelope(request: SubmitEnvelopeRequest): Promise<PolicyDecision> {
+    const result = await this.submitEnvelopeWithOutcome(request);
+    if (result.status === "failure") {
+      throw new PolicySubmissionError(
+        result.failureKind,
+        result.detail ?? `Control9 policy submission failed (${result.failureKind}).`,
+        result.detail,
+      );
+    }
+
+    return result.decision;
+  }
+
+  async submitEnvelopeWithOutcome(
+    request: SubmitEnvelopeRequest,
+  ): Promise<PolicySubmissionResult> {
     const url = buildSubmissionUrl(this.apiBaseUrl);
     let lastError: Error | undefined;
 
@@ -66,19 +84,29 @@ export class Control9PolicyClient {
             continue;
           }
 
-          throw new Control9ActionError(
-            `Control9 policy API returned HTTP ${response.status} for envelope submission.`,
-          );
+          return {
+            status: "failure",
+            failureKind: "unavailable_api",
+            detail: `Control9 policy API returned HTTP ${response.status} for envelope submission.`,
+          };
         }
 
-        const payload = (await response.json()) as Record<string, unknown>;
-        return normalizePolicyDecision(payload);
+        try {
+          const payload = (await response.json()) as Record<string, unknown>;
+          const decision = normalizePolicyDecision(payload);
+          return { status: "success", decision };
+        } catch (error) {
+          const detail =
+            error instanceof Error ? error.message : "Control9 policy response could not be normalized.";
+          return {
+            status: "failure",
+            failureKind: "malformed_response",
+            detail,
+          };
+        }
       } catch (error) {
-        if (error instanceof Control9ActionError) {
-          throw error;
-        }
-
         lastError = error instanceof Error ? error : new Error(String(error));
+
         if (attempt < this.maxAttempts) {
           await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
           continue;
@@ -86,9 +114,19 @@ export class Control9PolicyClient {
       }
     }
 
-    throw new Control9ActionError(
-      `Control9 policy API submission failed after ${this.maxAttempts} attempts: ${lastError?.message ?? "unknown error"}.`,
-    );
+    if (lastError && isTimeoutError(lastError)) {
+      return {
+        status: "failure",
+        failureKind: "timeout",
+        detail: lastError.message,
+      };
+    }
+
+    return {
+      status: "failure",
+      failureKind: "unavailable_api",
+      detail: `Control9 policy API submission failed after ${this.maxAttempts} attempts: ${lastError?.message ?? "unknown error"}.`,
+    };
   }
 }
 

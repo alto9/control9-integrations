@@ -6,6 +6,7 @@ export type PolicyDecisionOutcomeKind = "allow" | "deny" | "require_approval" | 
 export type ErrorOutcomeKind =
   | "timeout"
   | "unavailable_api"
+  | "malformed_response"
   | "redaction_applied"
   | "fingerprint_mismatch";
 
@@ -24,12 +25,22 @@ export interface TimeoutRenderInput {
   kind: "timeout";
   artifactFingerprint?: string;
   targetEnvironment?: string;
+  runtimeMode?: RuntimeMode;
 }
 
 export interface UnavailableApiRenderInput {
   kind: "unavailable_api";
   artifactFingerprint?: string;
   targetEnvironment?: string;
+  runtimeMode?: RuntimeMode;
+}
+
+export interface MalformedResponseRenderInput {
+  kind: "malformed_response";
+  artifactFingerprint?: string;
+  targetEnvironment?: string;
+  detail?: string;
+  runtimeMode?: RuntimeMode;
 }
 
 export interface RedactionAppliedRenderInput {
@@ -50,6 +61,7 @@ export type DecisionRenderInput =
   | PolicyDecisionRenderInput
   | TimeoutRenderInput
   | UnavailableApiRenderInput
+  | MalformedResponseRenderInput
   | RedactionAppliedRenderInput
   | FingerprintMismatchRenderInput;
 
