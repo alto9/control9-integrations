@@ -1,0 +1,9 @@
+{
+  "description": "HTTP 200 policy API payload missing required decision kind field.",
+  "httpStatus": 200,
+  "body": {
+    "decision_id": "dec-malformed-1"
+  },
+  "expectedFailureKind": "malformed_response",
+  "expectedDetailPattern": "decision kind"
+}

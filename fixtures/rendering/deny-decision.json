@@ -1,0 +1,10 @@
+{
+  "decisionId": "dec-deny-1",
+  "decisionKind": "deny",
+  "reason": "Policy restriction triggered for production IAM change.",
+  "riskSummary": "Broad IAM policy may grant excessive permissions.",
+  "policyVersion": "2026.06.1",
+  "artifactFingerprint": "fp-deny-001",
+  "targetEnvironment": "production",
+  "runtimeMode": "shadow"
+}
