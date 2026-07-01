@@ -1,0 +1,6 @@
+{
+  "description": "Malformed policy and verification responses block the workflow in both shadow and enforce mode.",
+  "modes": ["shadow", "enforce"],
+  "apiFailure": "malformed_response",
+  "expectedBlocks": true
+}

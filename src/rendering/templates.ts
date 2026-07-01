@@ -132,20 +132,32 @@ export function buildPolicyDecisionSummary(
   }
 }
 
-export function buildTimeoutSummary(runtimeMode?: RuntimeMode): string {
+export function buildTimeoutSummary(
+  runtimeMode?: RuntimeMode,
+  isFailOpenPath?: boolean,
+): string {
   const base =
     "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
   if (runtimeMode === "shadow") {
     return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
   }
+  if (isFailOpenPath) {
+    return `${base} This workflow continued because this environment is configured to fail open on API unavailability.`;
+  }
   return base;
 }
 
-export function buildUnavailableApiSummary(runtimeMode?: RuntimeMode): string {
+export function buildUnavailableApiSummary(
+  runtimeMode?: RuntimeMode,
+  isFailOpenPath?: boolean,
+): string {
   const base =
     "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
   if (runtimeMode === "shadow") {
     return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+  }
+  if (isFailOpenPath) {
+    return `${base} This workflow continued because this environment is configured to fail open on API unavailability.`;
   }
   return base;
 }

@@ -24,6 +24,26 @@ describe("parseActionInputs", () => {
     expect(parsed.control9ApiUrl).toBe("https://api.control9.example");
     expect(parsed.artifactPaths).toEqual(["fixtures/terraform/plan.json"]);
     expect(parsed.redactionAdditionalPatterns).toEqual([]);
+    expect(parsed.failOpenEnvironments).toEqual([]);
+  });
+
+  it("parses fail-open-environments with trim, lowercase, and dedupe", () => {
+    const parsed = parseActionInputs({
+      ...valid,
+      failOpenEnvironments: " Staging , DEV , staging ,  ",
+    });
+
+    expect(parsed.failOpenEnvironments).toEqual(["staging", "dev"]);
+  });
+
+  it("defaults fail-open-environments to an empty list when omitted", () => {
+    const parsed = parseActionInputs(valid);
+    expect(parsed.failOpenEnvironments).toEqual([]);
+  });
+
+  it("defaults fail-open-environments to an empty list when blank", () => {
+    const parsed = parseActionInputs({ ...valid, failOpenEnvironments: "   " });
+    expect(parsed.failOpenEnvironments).toEqual([]);
   });
 
   it("rejects missing API configuration", () => {

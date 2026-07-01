@@ -59,6 +59,7 @@ async function runPolicyFlow(options: {
     targetEnvironment: inputs.targetEnvironment,
     redactionReport: envelope.redactionReport,
     runtimeMode: inputs.mode,
+    failOpenEnvironments: inputs.failOpenEnvironments,
   });
 
   const summary =
@@ -124,6 +125,7 @@ async function runDeployVerificationFlow(options: {
     artifactFingerprint,
     targetEnvironment: inputs.targetEnvironment,
     runtimeMode: inputs.mode,
+    failOpenEnvironments: inputs.failOpenEnvironments,
   });
 
   const summary =

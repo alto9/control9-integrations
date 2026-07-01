@@ -1,4 +1,5 @@
 import type { RedactionReport } from "../envelope/types";
+import { resolveApiFailureBlocksWorkflow } from "../blocking/resolve-blocking";
 import type { PolicySubmissionResult } from "../policy/submission";
 import type { VerificationSubmissionResult } from "../verification/submission";
 import type { DeployVerification, VerificationStatus } from "../verification/types";
@@ -21,17 +22,7 @@ export interface RoutePolicyOutcomeOptions {
   targetEnvironment: string;
   redactionReport: RedactionReport;
   runtimeMode: RuntimeMode;
-}
-
-function resolveApiFailureBlocking(
-  failureKind: "unavailable_api" | "timeout" | "malformed_response",
-  runtimeMode: RuntimeMode,
-): boolean {
-  if (failureKind === "malformed_response") {
-    return true;
-  }
-
-  return runtimeMode === "enforce";
+  failOpenEnvironments: string[];
 }
 
 export interface RoutedVerificationOutcome {
@@ -47,6 +38,7 @@ export interface RouteVerificationOutcomeOptions {
   artifactFingerprint: string;
   targetEnvironment: string;
   runtimeMode: RuntimeMode;
+  failOpenEnvironments: string[];
 }
 
 function resolveVerificationBlocking(
@@ -63,7 +55,8 @@ function resolveVerificationBlocking(
 export function routeVerificationSubmissionOutcome(
   options: RouteVerificationOutcomeOptions,
 ): RoutedVerificationOutcome {
-  const { submission, artifactFingerprint, targetEnvironment, runtimeMode } = options;
+  const { submission, artifactFingerprint, targetEnvironment, runtimeMode, failOpenEnvironments } =
+    options;
 
   if (submission.status === "success") {
     const { verification } = submission;
@@ -105,10 +98,16 @@ export function routeVerificationSubmissionOutcome(
           artifactFingerprint,
           targetEnvironment,
           runtimeMode,
+          failOpenEnvironments,
         };
 
   const rendered = renderDecisionFeedback(renderInput);
-  const blocksWorkflow = resolveApiFailureBlocking(submission.failureKind, runtimeMode);
+  const blocksWorkflow = resolveApiFailureBlocksWorkflow({
+    failureKind: submission.failureKind,
+    mode: runtimeMode,
+    targetEnvironment,
+    failOpenEnvironments,
+  });
 
   return {
     renderInput,
@@ -170,6 +169,7 @@ export function routePolicySubmissionOutcome(
     targetEnvironment,
     redactionReport,
     runtimeMode,
+    failOpenEnvironments,
   } = options;
 
   if (submission.status === "success") {
@@ -206,10 +206,16 @@ export function routePolicySubmissionOutcome(
           artifactFingerprint,
           targetEnvironment,
           runtimeMode,
+          failOpenEnvironments,
         };
 
   const rendered = renderDecisionFeedback(renderInput);
-  const blocksWorkflow = resolveApiFailureBlocking(submission.failureKind, runtimeMode);
+  const blocksWorkflow = resolveApiFailureBlocksWorkflow({
+    failureKind: submission.failureKind,
+    mode: runtimeMode,
+    targetEnvironment,
+    failOpenEnvironments,
+  });
 
   return {
     renderInput,

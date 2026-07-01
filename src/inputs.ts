@@ -23,6 +23,7 @@ export interface RawActionInputs {
   workingDirectory?: string;
   redactionProfile?: string;
   redactionAdditionalPatterns?: string;
+  failOpenEnvironments?: string;
 }
 
 function requireNonEmpty(value: string | undefined, label: string): string {
@@ -72,6 +73,25 @@ function parseOptionalCommaSeparatedList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function parseFailOpenEnvironments(value: string | undefined): string[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value.split(",")) {
+    const key = item.trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      normalized.push(key);
+    }
+  }
+
+  return normalized;
+}
+
 function validateApiUrl(value: string): string {
   let parsed: URL;
   try {
@@ -107,6 +127,7 @@ export function parseActionInputs(raw: RawActionInputs): ActionInputs {
     redactionAdditionalPatterns: parseOptionalCommaSeparatedList(
       raw.redactionAdditionalPatterns,
     ),
+    failOpenEnvironments: parseFailOpenEnvironments(raw.failOpenEnvironments),
   };
 }
 
@@ -124,5 +145,6 @@ export function readActionInputsFromEnv(): ActionInputs {
     workingDirectory: process.env.INPUT_WORKING_DIRECTORY,
     redactionProfile: process.env.INPUT_REDACTION_PROFILE,
     redactionAdditionalPatterns: process.env.INPUT_REDACTION_ADDITIONAL_PATTERNS,
+    failOpenEnvironments: process.env.INPUT_FAIL_OPEN_ENVIRONMENTS,
   });
 }

@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { routeVerificationSubmissionOutcome } from "../src/outcomes/route";
 
+const baseRouteOptions = {
+  artifactFingerprint: "fp-current",
+  targetEnvironment: "production",
+  failOpenEnvironments: [] as string[],
+};
+
 describe("routeVerificationSubmissionOutcome", () => {
   it.each([
     "verified",
@@ -24,8 +30,7 @@ describe("routeVerificationSubmissionOutcome", () => {
             verificationStatus === "fingerprint_mismatch" ? "fp-current" : undefined,
         },
       },
-      artifactFingerprint: "fp-current",
-      targetEnvironment: "production",
+      ...baseRouteOptions,
       runtimeMode: "shadow",
     });
 
@@ -58,8 +63,7 @@ describe("routeVerificationSubmissionOutcome", () => {
               verificationStatus === "fingerprint_mismatch" ? "fp-current" : undefined,
           },
         },
-        artifactFingerprint: "fp-current",
-        targetEnvironment: "production",
+        ...baseRouteOptions,
         runtimeMode,
       });
 
@@ -84,8 +88,7 @@ describe("routeVerificationSubmissionOutcome", () => {
           failureKind,
           detail: `${failureKind} detail`,
         },
-        artifactFingerprint: "fp-current",
-        targetEnvironment: "production",
+        ...baseRouteOptions,
         runtimeMode,
       });
 
@@ -94,4 +97,21 @@ describe("routeVerificationSubmissionOutcome", () => {
       expect(routed.blocksWorkflow).toBe(blocksWorkflow);
     },
   );
+
+  it("does not block enforce-mode unavailable_api when target environment is fail-open", () => {
+    const routed = routeVerificationSubmissionOutcome({
+      submission: {
+        status: "failure",
+        failureKind: "unavailable_api",
+        detail: "HTTP 503",
+      },
+      ...baseRouteOptions,
+      targetEnvironment: "staging",
+      runtimeMode: "enforce",
+      failOpenEnvironments: ["staging"],
+    });
+
+    expect(routed.blocksWorkflow).toBe(false);
+    expect(routed.rendered.summary).toMatch(/configured to fail open on API unavailability/i);
+  });
 });

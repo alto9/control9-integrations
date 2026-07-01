@@ -183,29 +183,44 @@ describe("renderDecisionFeedback", () => {
     expect(rendered.metadata.redactionStatus).toBeUndefined();
   });
 
-  it("blocks unavailable API and timeout outcomes in enforce mode only", () => {
+  it("blocks unavailable API and timeout outcomes in enforce mode on protected targets only", () => {
     const unavailableEnforce = renderDecisionFeedback({
       kind: "unavailable_api",
       runtimeMode: "enforce",
+      targetEnvironment: "production",
+      failOpenEnvironments: [],
     });
     expect(unavailableEnforce.blocksWorkflow).toBe(true);
 
     const unavailableShadow = renderDecisionFeedback({
       kind: "unavailable_api",
       runtimeMode: "shadow",
+      targetEnvironment: "production",
     });
     expect(unavailableShadow.blocksWorkflow).toBe(false);
     expect(unavailableShadow.summary).toMatch(/Shadow mode is active/i);
 
+    const unavailableFailOpen = renderDecisionFeedback({
+      kind: "unavailable_api",
+      runtimeMode: "enforce",
+      targetEnvironment: "staging",
+      failOpenEnvironments: ["staging"],
+    });
+    expect(unavailableFailOpen.blocksWorkflow).toBe(false);
+    expect(unavailableFailOpen.summary).toMatch(/configured to fail open on API unavailability/i);
+
     const timeoutEnforce = renderDecisionFeedback({
       kind: "timeout",
       runtimeMode: "enforce",
+      targetEnvironment: "production",
+      failOpenEnvironments: [],
     });
     expect(timeoutEnforce.blocksWorkflow).toBe(true);
 
     const timeoutShadow = renderDecisionFeedback({
       kind: "timeout",
       runtimeMode: "shadow",
+      targetEnvironment: "production",
     });
     expect(timeoutShadow.blocksWorkflow).toBe(false);
   });

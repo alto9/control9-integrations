@@ -370,6 +370,20 @@ describe("runAction outcome integration", () => {
     );
   });
 
+  it("continues enforce mode when the policy API is unavailable on a fail-open environment", async () => {
+    process.env.INPUT_MODE = "enforce";
+    process.env.INPUT_TARGET_ENVIRONMENT = "staging";
+    process.env.INPUT_FAIL_OPEN_ENVIRONMENTS = "staging, dev";
+    mockUnavailableApiExhaustion();
+
+    await runAction();
+
+    expect(getOutput("decision-kind")).toBe("unavailable_api");
+    expect(coreMocks.setFailed).not.toHaveBeenCalled();
+    const summaryContent = readFileSync(stepSummaryPath, "utf8");
+    expect(summaryContent).toMatch(/configured to fail open on API unavailability/i);
+  });
+
   it.each(["shadow", "enforce"] as const)(
     "always blocks on malformed policy responses in %s mode",
     async (mode) => {
@@ -571,6 +585,21 @@ describe("runAction outcome integration", () => {
       );
       expect(coreMocks.warning.mock.calls[0]?.[1]?.title).toBe(
         OUTCOME_TEMPLATES.unavailable_api.label,
+      );
+    });
+
+    it("continues enforce mode when the verification API is unavailable on a fail-open environment", async () => {
+      process.env.INPUT_MODE = "enforce";
+      process.env.INPUT_TARGET_ENVIRONMENT = "staging";
+      process.env.INPUT_FAIL_OPEN_ENVIRONMENTS = "staging";
+      mockUnavailableVerificationApiExhaustion();
+
+      await runAction();
+
+      expect(getOutput("verification-status")).toBe("unavailable_api");
+      expect(coreMocks.setFailed).not.toHaveBeenCalled();
+      expect(readFileSync(stepSummaryPath, "utf8")).toMatch(
+        /configured to fail open on API unavailability/i,
       );
     });
 
