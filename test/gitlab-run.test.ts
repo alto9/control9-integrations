@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runGitLabAssessment } from "../src/gitlab/runner";
+import { POLICY_SECTION_ID } from "../src/gitlab/job-log";
 import { OUTCOME_TEMPLATES } from "../src/rendering/templates";
 
 interface RenderingFixture {
@@ -76,7 +77,7 @@ describe("runGitLabAssessment", () => {
     );
   }
 
-  it("builds a gitlab provider envelope and emits baseline structured logs in shadow mode", async () => {
+  it("builds a gitlab provider envelope and emits collapsible job log sections in shadow mode", async () => {
     mockPolicySuccess(denyFixture);
 
     await expect(runGitLabAssessment()).resolves.toBeUndefined();
@@ -84,10 +85,12 @@ describe("runGitLabAssessment", () => {
     const summaryPath = path.join(tempDirectory, "control9-summary.json");
     const summaryJson = readFileSync(summaryPath, "utf8");
     expect(summaryJson).toContain('"decisionKind": "deny"');
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining(OUTCOME_TEMPLATES.deny.label),
+    const logged = logSpy.mock.calls.map(([line]) => String(line));
+    expect(logged.some((line) => line.includes(`section_start:`) && line.includes(POLICY_SECTION_ID))).toBe(
+      true,
     );
-    expect(logSpy).toHaveBeenCalledWith(OUTCOME_TEMPLATES.deny.title);
+    expect(logged.some((line) => line.includes(OUTCOME_TEMPLATES.deny.label))).toBe(true);
+    expect(logged.some((line) => line.match(/^Control9 NOTICE:/))).toBe(true);
     expect(process.exitCode).not.toBe(1);
   });
 
