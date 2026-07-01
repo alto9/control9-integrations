@@ -1,12 +1,13 @@
 # Configuration
 
-This doc describes configuration classes and safe defaults for the GitHub Action customer edge.
+This doc describes configuration classes and safe defaults for the GitHub Action and GitLab CI customer edge.
 
 ## Contract
 
 - The integration runs inside customer CI/CD runners without taking over execution.
 - First installs default to shadow mode. Enforce mode is selected explicitly when protected deploy paths are configured.
-- Configuration is supplied through GitHub Action inputs and secrets. There is no separate on-disk config file for the first GitHub Action path.
+- Configuration is supplied through provider-native inputs and secrets. There is no separate on-disk config file.
+- GitHub Action inputs and GitLab CI component `spec:inputs` expose the same logical configuration surface documented below.
 
 ## Configuration classes
 
@@ -57,3 +58,25 @@ This doc describes configuration classes and safe defaults for the GitHub Action
 | Signing algorithm | `hmac-sha256` | Fixed; not customer-configurable |
 
 Missing required inputs, invalid URLs, unsupported tool or command values, unreadable artifact paths, or redaction failures fail locally before envelope submission.
+
+## GitLab CI mapping
+
+GitLab pipelines configure the component through `include:inputs` (remote include or catalog). Secret values use masked/protected CI/CD variables referenced from the component template.
+
+| Logical setting | GitLab component input | Environment variable |
+|-----------------|------------------------|----------------------|
+| Runtime mode | `mode` | `INPUT_MODE` |
+| API base URL | `control9-api-url` | `INPUT_CONTROL9_API_URL` |
+| Tenant identity | `tenant-id` | `INPUT_TENANT_ID` |
+| Signing secret | `signing-secret` (masked variable) | `INPUT_SIGNING_SECRET` |
+| Target environment | `target-environment` | `INPUT_TARGET_ENVIRONMENT` |
+| Requested authority | `requested-authority` | `INPUT_REQUESTED_AUTHORITY` |
+| IaC tool | `iac-tool` | `INPUT_IAC_TOOL` |
+| Command category | `command` | `INPUT_COMMAND` |
+| Artifact paths | `artifact-paths` | `INPUT_ARTIFACT_PATHS` |
+| Working directory | `working-directory` | `INPUT_WORKING_DIRECTORY` |
+| Redaction profile | `redaction-profile` | `INPUT_REDACTION_PROFILE` |
+| Extra redaction patterns | `redaction-additional-patterns` | `INPUT_REDACTION_ADDITIONAL_PATTERNS` |
+| Fail-open environments | `fail-open-environments` | `INPUT_FAIL_OPEN_ENVIRONMENTS` |
+
+GitLab summary output uses `CI_PROJECT_DIR/.control9/output/control9-summary.json` when `RUNNER_TEMP` is unavailable, matching the GitHub fallback path semantics relative to the job working directory.

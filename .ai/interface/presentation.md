@@ -18,7 +18,15 @@ For the GitHub Action path in this milestone:
 - **Log fallback:** When `GITHUB_STEP_SUMMARY` is unavailable, emit the same content as structured log lines.
 - **PR comments:** Publish rendered markdown through the PR comment helper when the workflow context includes an open pull request; comment create/update policy for multi-run workflows remains a later presentation decision.
 
-GitLab job output, merge request comment behavior, and dedicated check-run names are out of scope for the GitHub enforce-mode outcome milestone and remain future expansion.
+GitLab merge request comment behavior, GitLab job report markdown sections, and dedicated check-run names beyond structured log output remain in the GitLab presentation milestone.
+
+### GitLab CI baseline (component milestone)
+
+Until the GitLab presentation milestone ships:
+
+- **Structured logs:** Emit the same outcome label, title, and summary text used by GitHub templates as single-line or multi-line job log output.
+- **Summary artifact:** Write the local summary JSON path documented in `runtime/configuration.md`.
+- **Blocking:** Non-zero job exit when `blocksWorkflow` is true; zero exit otherwise.
 
 ## Open implementation decisions
 

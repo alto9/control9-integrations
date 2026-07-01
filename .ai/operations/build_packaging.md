@@ -8,6 +8,8 @@ This doc describes how artifacts are produced, versioned, reviewed, or packaged.
 - Release artifacts support pinning, provenance, changelog review, and auditability.
 - The first GitHub Action implementation uses TypeScript and ships with committed action metadata, build output suitable for GitHub Actions consumption, unit tests, parser fixtures, schema fixtures, linting, and a reproducible build script.
 - Action releases are tag-pinnable. Customers can pin a major version or an exact tag, while security-sensitive adopters can review source, generated action output, dependency updates, and changelog entries before upgrading.
+- GitLab CI component consumption reuses the same tagged release bundle (`dist/index.js`) and publishes `templates/control9-assessment/template.yml` alongside GitHub Action metadata in each release.
+- Example consumer pipelines live under `examples/` (GitHub workflow and GitLab remote include). Production adopters pin exact semver tags for both the action reference and the GitLab `control9-version` input.
 
 ## Open implementation decisions
 
