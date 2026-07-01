@@ -1,0 +1,10 @@
+{
+  "description": "Shadow mode continues when the policy API is unavailable regardless of fail-open list.",
+  "command": "plan",
+  "mode": "shadow",
+  "targetEnvironment": "production",
+  "failOpenEnvironments": "",
+  "apiFailure": "unavailable_api",
+  "expectedBlocks": false,
+  "expectedOutputKind": "unavailable_api"
+}

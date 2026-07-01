@@ -1,0 +1,11 @@
+{
+  "description": "Enforce mode on staging with fail-open-environments continues when the policy API is unavailable after retries.",
+  "command": "plan",
+  "mode": "enforce",
+  "targetEnvironment": "staging",
+  "failOpenEnvironments": "staging, dev",
+  "apiFailure": "unavailable_api",
+  "expectedBlocks": false,
+  "expectedOutputKind": "unavailable_api",
+  "expectedAdvisorySuffix": "configured to fail open on API unavailability"
+}

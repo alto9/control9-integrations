@@ -1,0 +1,11 @@
+{
+  "description": "Enforce mode on a fail-open environment still blocks on deploy-verification fingerprint mismatch.",
+  "command": "deploy-verification",
+  "mode": "enforce",
+  "targetEnvironment": "staging",
+  "failOpenEnvironments": "staging",
+  "apiFailure": "fingerprint_mismatch",
+  "expectedBlocks": true,
+  "expectedOutputKind": "fingerprint_mismatch",
+  "expectedSummaryPattern": "does not match the approved fingerprint"
+}

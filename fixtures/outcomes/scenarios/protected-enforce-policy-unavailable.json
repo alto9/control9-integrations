@@ -1,0 +1,10 @@
+{
+  "description": "Enforce mode on production with an empty fail-open list blocks when the policy API is unavailable after retries.",
+  "command": "plan",
+  "mode": "enforce",
+  "targetEnvironment": "production",
+  "failOpenEnvironments": "",
+  "apiFailure": "unavailable_api",
+  "expectedBlocks": true,
+  "expectedOutputKind": "unavailable_api"
+}

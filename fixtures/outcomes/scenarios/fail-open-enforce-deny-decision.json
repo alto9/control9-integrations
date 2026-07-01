@@ -1,0 +1,11 @@
+{
+  "description": "Enforce mode on a fail-open environment still blocks on a normalized deny decision.",
+  "command": "plan",
+  "mode": "enforce",
+  "targetEnvironment": "staging",
+  "failOpenEnvironments": "staging, dev",
+  "apiFailure": "deny_decision",
+  "expectedBlocks": true,
+  "expectedOutputKind": "deny",
+  "expectedSummaryPattern": "Policy restriction triggered"
+}
