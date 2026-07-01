@@ -149,6 +149,32 @@ describe("readMrNoteContextFromEnv", () => {
     }
   });
 
+  it("returns undefined when CI_PROJECT_ID is absent on a merge request pipeline", () => {
+    const previous = {
+      CI_MERGE_REQUEST_IID: process.env.CI_MERGE_REQUEST_IID,
+      CI_PROJECT_ID: process.env.CI_PROJECT_ID,
+      CI_SERVER_URL: process.env.CI_SERVER_URL,
+      CONTROL9_GITLAB_TOKEN: process.env.CONTROL9_GITLAB_TOKEN,
+    };
+
+    try {
+      process.env.CI_MERGE_REQUEST_IID = "7";
+      delete process.env.CI_PROJECT_ID;
+      process.env.CI_SERVER_URL = "https://gitlab.example.com";
+      process.env.CONTROL9_GITLAB_TOKEN = "glpat-test";
+
+      expect(readMrNoteContextFromEnv()).toBeUndefined();
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+  });
+
   it("returns undefined when CI_MERGE_REQUEST_IID is absent", () => {
     const previous = process.env.CI_MERGE_REQUEST_IID;
     delete process.env.CI_MERGE_REQUEST_IID;

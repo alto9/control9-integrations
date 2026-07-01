@@ -1,0 +1,27 @@
+{
+  "description": "Expected GitLab job log presentation for deploy-verification outcomes. Section headers match .ai/interface/presentation.md for manual diff review.",
+  "deployVerificationSectionHeading": "Control9 Deploy Verification",
+  "deployVerificationSectionId": "control9-deploy-verification",
+  "logPrefixes": {
+    "nonBlocking": "Control9 NOTICE",
+    "blocking": "Control9 WARNING"
+  },
+  "scenarios": [
+    {
+      "label": "verified",
+      "verificationFixture": "fixtures/rendering/verified-response.json",
+      "runtimeMode": "shadow",
+      "blocksWorkflow": false,
+      "expectedLogPrefix": "Control9 NOTICE",
+      "expectedSectionHeading": "Control9 Deploy Verification"
+    },
+    {
+      "label": "fingerprint-mismatch-enforce",
+      "verificationFixture": "fixtures/rendering/fingerprint-mismatch-response.json",
+      "runtimeMode": "enforce",
+      "blocksWorkflow": true,
+      "expectedLogPrefix": "Control9 WARNING",
+      "expectedSectionHeading": "Control9 Deploy Verification"
+    }
+  ]
+}

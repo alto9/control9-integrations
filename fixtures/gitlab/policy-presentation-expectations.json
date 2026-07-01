@@ -1,0 +1,43 @@
+{
+  "description": "Expected GitLab job log presentation for policy command outcomes. Section headers match .ai/interface/presentation.md for manual diff review.",
+  "policySectionHeading": "Control9 Policy Decision",
+  "policySectionId": "control9-policy-decision",
+  "logPrefixes": {
+    "nonBlocking": "Control9 NOTICE",
+    "blocking": "Control9 WARNING"
+  },
+  "scenarios": [
+    {
+      "label": "allow-shadow",
+      "decisionFixture": "fixtures/rendering/allow-decision.json",
+      "runtimeMode": "shadow",
+      "blocksWorkflow": false,
+      "expectedLogPrefix": "Control9 NOTICE",
+      "expectedSectionHeading": "Control9 Policy Decision"
+    },
+    {
+      "label": "deny-shadow",
+      "decisionFixture": "fixtures/rendering/deny-decision.json",
+      "runtimeMode": "shadow",
+      "blocksWorkflow": false,
+      "expectedLogPrefix": "Control9 NOTICE",
+      "expectedSectionHeading": "Control9 Policy Decision"
+    },
+    {
+      "label": "deny-enforce",
+      "decisionFixture": "fixtures/rendering/deny-decision.json",
+      "runtimeMode": "enforce",
+      "blocksWorkflow": true,
+      "expectedLogPrefix": "Control9 WARNING",
+      "expectedSectionHeading": "Control9 Policy Decision"
+    },
+    {
+      "label": "require-approval-enforce",
+      "decisionFixture": "fixtures/rendering/require-approval-decision.json",
+      "runtimeMode": "enforce",
+      "blocksWorkflow": true,
+      "expectedLogPrefix": "Control9 WARNING",
+      "expectedSectionHeading": "Control9 Policy Decision"
+    }
+  ]
+}
