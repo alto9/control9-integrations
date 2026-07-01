@@ -32,6 +32,10 @@ export const OUTCOME_TEMPLATES: Record<RenderOutcomeKind, OutcomeTemplate> = {
     label: "Outcome: Policy API Unavailable",
     title: "Control9 policy API is unavailable",
   },
+  malformed_response: {
+    label: "Outcome: Malformed Policy Response",
+    title: "Control9 received an invalid policy response",
+  },
   redaction_applied: {
     label: "Outcome: Redaction Applied",
     title: "Control9 redaction was applied before submission",
@@ -91,7 +95,10 @@ function readSafeFollowUpString(
 }
 
 export function buildPolicyDecisionSummary(
-  outcomeKind: Exclude<RenderOutcomeKind, "timeout" | "unavailable_api" | "redaction_applied" | "fingerprint_mismatch">,
+  outcomeKind: Exclude<
+    RenderOutcomeKind,
+    "timeout" | "unavailable_api" | "malformed_response" | "redaction_applied" | "fingerprint_mismatch"
+  >,
   decision: PolicyDecision,
   runtimeMode: RuntimeMode | undefined,
 ): string {
@@ -111,12 +118,31 @@ export function buildPolicyDecisionSummary(
   }
 }
 
-export function buildTimeoutSummary(): string {
-  return "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
+export function buildTimeoutSummary(runtimeMode?: RuntimeMode): string {
+  const base =
+    "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
+  if (runtimeMode === "shadow") {
+    return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+  }
+  return base;
 }
 
-export function buildUnavailableApiSummary(): string {
-  return "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+export function buildUnavailableApiSummary(runtimeMode?: RuntimeMode): string {
+  const base =
+    "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+  if (runtimeMode === "shadow") {
+    return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+  }
+  return base;
+}
+
+export function buildMalformedResponseSummary(detail?: string): string {
+  const base =
+    "Control9 received a policy API response that could not be normalized into a decision.";
+  if (detail?.trim()) {
+    return `${base} ${detail.trim()}`;
+  }
+  return `${base} Review Control9 service logs and API contract compatibility before rerunning the job.`;
 }
 
 export function buildRedactionAppliedSummary(report: RedactionReport): string {
@@ -134,13 +160,19 @@ export function buildFingerprintMismatchSummary(
 }
 
 export function buildErrorDetailLines(
-  outcomeKind: "timeout" | "unavailable_api" | "redaction_applied" | "fingerprint_mismatch",
+  outcomeKind:
+    | "timeout"
+    | "unavailable_api"
+    | "malformed_response"
+    | "redaction_applied"
+    | "fingerprint_mismatch",
   options: {
     artifactFingerprint?: string;
     targetEnvironment?: string;
     redactionReport?: RedactionReport;
     expectedFingerprint?: string;
     actualFingerprint?: string;
+    detail?: string;
   },
 ): string[] {
   const lines: string[] = [];
@@ -150,6 +182,10 @@ export function buildErrorDetailLines(
   }
   if (options.artifactFingerprint) {
     lines.push(`Artifact fingerprint: ${options.artifactFingerprint}`);
+  }
+
+  if (outcomeKind === "malformed_response" && options.detail?.trim()) {
+    lines.push(`Response detail: ${options.detail.trim()}`);
   }
 
   if (outcomeKind === "redaction_applied" && options.redactionReport) {

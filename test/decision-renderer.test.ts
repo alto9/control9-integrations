@@ -82,7 +82,13 @@ describe("renderDecisionFeedback", () => {
       labels.add(rendered.label);
     }
 
-    for (const kind of ["timeout", "unavailable_api", "redaction_applied", "fingerprint_mismatch"] as const) {
+    for (const kind of [
+      "timeout",
+      "unavailable_api",
+      "malformed_response",
+      "redaction_applied",
+      "fingerprint_mismatch",
+    ] as const) {
       const rendered =
         kind === "redaction_applied"
           ? renderDecisionFeedback({ kind, redactionReport })
@@ -92,11 +98,13 @@ describe("renderDecisionFeedback", () => {
                 expectedFingerprint: "fp-approved",
                 actualFingerprint: "fp-current",
               })
-            : renderDecisionFeedback({ kind });
+            : kind === "malformed_response"
+              ? renderDecisionFeedback({ kind, detail: "missing decision id" })
+              : renderDecisionFeedback({ kind });
       labels.add(rendered.label);
     }
 
-    expect(labels.size).toBe(8);
+    expect(labels.size).toBe(9);
   });
 
   it("marks observe decisions as advisory and non-blocking", () => {
@@ -159,6 +167,45 @@ describe("renderDecisionFeedback", () => {
     expect(rendered.detailLines.join("\n")).not.toContain("Redaction status:");
     expect(rendered.metadata.policyVersion).toBeUndefined();
     expect(rendered.metadata.redactionStatus).toBeUndefined();
+  });
+
+  it("blocks unavailable API and timeout outcomes in enforce mode only", () => {
+    const unavailableEnforce = renderDecisionFeedback({
+      kind: "unavailable_api",
+      runtimeMode: "enforce",
+    });
+    expect(unavailableEnforce.blocksWorkflow).toBe(true);
+
+    const unavailableShadow = renderDecisionFeedback({
+      kind: "unavailable_api",
+      runtimeMode: "shadow",
+    });
+    expect(unavailableShadow.blocksWorkflow).toBe(false);
+    expect(unavailableShadow.summary).toMatch(/Shadow mode is active/i);
+
+    const timeoutEnforce = renderDecisionFeedback({
+      kind: "timeout",
+      runtimeMode: "enforce",
+    });
+    expect(timeoutEnforce.blocksWorkflow).toBe(true);
+
+    const timeoutShadow = renderDecisionFeedback({
+      kind: "timeout",
+      runtimeMode: "shadow",
+    });
+    expect(timeoutShadow.blocksWorkflow).toBe(false);
+  });
+
+  it("always blocks malformed policy responses", () => {
+    const malformedShadow = renderDecisionFeedback({
+      kind: "malformed_response",
+      detail: "missing decision id",
+      runtimeMode: "shadow",
+    });
+    expect(malformedShadow.blocksWorkflow).toBe(true);
+    expect(malformedShadow.label).toBe(OUTCOME_TEMPLATES.malformed_response.label);
+    expect(malformedShadow.summary).toMatch(/could not be normalized/i);
+    expect(malformedShadow.detailLines.join("\n")).toContain("missing decision id");
   });
 
   it("renders timeout, unavailable API, redaction applied, and fingerprint mismatch outcomes", () => {

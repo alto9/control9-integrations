@@ -33189,9 +33189,9 @@ const core = __importStar(__nccwpck_require__(7484));
 const build_1 = __nccwpck_require__(1252);
 const workflow_summary_1 = __nccwpck_require__(3151);
 const inputs_1 = __nccwpck_require__(8422);
+const route_1 = __nccwpck_require__(3876);
 const outputs_1 = __nccwpck_require__(7729);
 const client_1 = __nccwpck_require__(867);
-const decision_renderer_1 = __nccwpck_require__(1206);
 const routing_1 = __nccwpck_require__(6357);
 const types_1 = __nccwpck_require__(8522);
 async function runAction() {
@@ -33200,20 +33200,21 @@ async function runAction() {
     const artifactFingerprint = (0, routing_1.fingerprintArtifacts)(routed.resolvedArtifactPaths);
     const envelope = (0, build_1.buildSignedActionEnvelope)(inputs, routed);
     const policyClient = (0, client_1.createPolicyClient)({ apiBaseUrl: inputs.control9ApiUrl });
-    const decision = await policyClient.submitEnvelope({ envelope });
-    const summary = (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, decision);
-    const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
-    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, decision);
-    const rendered = (0, decision_renderer_1.renderDecisionFeedback)({
-        kind: "policy_decision",
-        decision,
+    const submission = await policyClient.submitEnvelopeWithOutcome({ envelope });
+    const routedOutcome = (0, route_1.routePolicySubmissionOutcome)({
+        submission,
         artifactFingerprint,
         targetEnvironment: inputs.targetEnvironment,
         redactionReport: envelope.redactionReport,
         runtimeMode: inputs.mode,
     });
+    const summary = submission.status === "success"
+        ? (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.decision)
+        : (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
+    const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
+    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, routedOutcome.decisionKindOutput, submission.status === "success" ? submission.decision.decisionId : "");
     const feedback = await (0, workflow_summary_1.publishWorkflowFeedback)({
-        rendered,
+        rendered: routedOutcome.rendered,
         summaryPath,
     });
     core.setOutput("envelope-id", result.envelopeId);
@@ -33224,10 +33225,10 @@ async function runAction() {
     core.setOutput("summary-written", String(feedback.summaryWritten));
     core.setOutput("pr-comment-state", feedback.prCommentState);
     core.info(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${result.envelopeId} in ${inputs.mode} mode.`);
-    core.info(`Decision ${result.decisionKind}: ${summary.decisionReason}`);
+    core.info(`Outcome ${result.decisionKind}: ${summary.message}`);
     core.info(`Summary written to ${summaryPath}.`);
-    if (rendered.blocksWorkflow) {
-        throw new types_1.Control9ActionError(rendered.summary);
+    if (routedOutcome.blocksWorkflow) {
+        throw new types_1.Control9ActionError(routedOutcome.rendered.summary);
     }
 }
 async function main() {
@@ -33348,6 +33349,71 @@ function readActionInputsFromEnv() {
 
 /***/ }),
 
+/***/ 3876:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.routePolicySubmissionOutcome = routePolicySubmissionOutcome;
+const decision_renderer_1 = __nccwpck_require__(1206);
+function resolveApiFailureBlocking(failureKind, runtimeMode) {
+    if (failureKind === "malformed_response") {
+        return true;
+    }
+    return runtimeMode === "enforce";
+}
+function routePolicySubmissionOutcome(options) {
+    const { submission, artifactFingerprint, targetEnvironment, redactionReport, runtimeMode, } = options;
+    if (submission.status === "success") {
+        const renderInput = {
+            kind: "policy_decision",
+            decision: submission.decision,
+            artifactFingerprint,
+            targetEnvironment,
+            redactionReport,
+            runtimeMode,
+        };
+        const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
+        return {
+            renderInput,
+            rendered,
+            blocksWorkflow: rendered.blocksWorkflow,
+            decisionKindOutput: submission.decision.decisionKind,
+            summaryMessage: submission.decision.reason,
+        };
+    }
+    const renderInput = submission.failureKind === "malformed_response"
+        ? {
+            kind: "malformed_response",
+            artifactFingerprint,
+            targetEnvironment,
+            detail: submission.detail,
+            runtimeMode,
+        }
+        : {
+            kind: submission.failureKind,
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+        };
+    const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
+    const blocksWorkflow = resolveApiFailureBlocking(submission.failureKind, runtimeMode);
+    return {
+        renderInput,
+        rendered: {
+            ...rendered,
+            blocksWorkflow,
+        },
+        blocksWorkflow,
+        decisionKindOutput: submission.failureKind,
+        summaryMessage: rendered.summary,
+    };
+}
+
+
+/***/ }),
+
 /***/ 7729:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -33358,6 +33424,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildValidationSummary = buildValidationSummary;
+exports.buildFailureValidationSummary = buildFailureValidationSummary;
 exports.writeSummaryFile = writeSummaryFile;
 exports.buildActionResult = buildActionResult;
 const node_fs_1 = __nccwpck_require__(3024);
@@ -33383,6 +33450,27 @@ function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, d
         message: decision.reason,
     };
 }
+function buildFailureValidationSummary(inputs, routed, artifactFingerprint, envelope, submission, summaryMessage) {
+    return {
+        mode: inputs.mode,
+        tenantId: inputs.tenantId,
+        targetEnvironment: inputs.targetEnvironment,
+        requestedAuthority: inputs.requestedAuthority,
+        iacTool: routed.iacTool,
+        command: routed.command,
+        artifactFingerprint,
+        artifactPaths: routed.artifactPaths,
+        redactionProfile: inputs.redactionProfile ?? "standard",
+        envelopeId: envelope.envelopeId,
+        correlationId: envelope.correlationId,
+        decisionId: "",
+        decisionKind: submission.failureKind,
+        decisionReason: summaryMessage,
+        redactionCount: envelope.redactionReport.totalRedactions,
+        status: "submission_failed",
+        message: summaryMessage,
+    };
+}
 function writeSummaryFile(summary) {
     const outputDirectory = process.env.RUNNER_TEMP?.trim() ||
         node_path_1.default.join(process.cwd(), ".control9", "output");
@@ -33391,12 +33479,12 @@ function writeSummaryFile(summary) {
     (0, node_fs_1.writeFileSync)(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
     return summaryPath;
 }
-function buildActionResult(summaryPath, artifactFingerprint, envelope, decision) {
+function buildActionResult(summaryPath, artifactFingerprint, envelope, decisionKind, decisionId = "") {
     return {
         envelopeId: envelope.envelopeId,
         artifactFingerprint,
-        decisionId: decision.decisionId,
-        decisionKind: decision.decisionKind,
+        decisionId,
+        decisionKind,
         summaryPath,
     };
 }
@@ -33624,8 +33712,8 @@ exports.SUPPORTED_PLAN_FORMAT_VERSIONS = new Set(["1.0", "1.1", "1.2"]);
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Control9PolicyClient = void 0;
 exports.createPolicyClient = createPolicyClient;
-const types_1 = __nccwpck_require__(8522);
 const normalize_1 = __nccwpck_require__(2425);
+const submission_1 = __nccwpck_require__(5020);
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 function sleep(ms) {
     return new Promise((resolve) => {
@@ -33650,6 +33738,13 @@ class Control9PolicyClient {
         this.fetchImpl = options.fetchImpl ?? fetch;
     }
     async submitEnvelope(request) {
+        const result = await this.submitEnvelopeWithOutcome(request);
+        if (result.status === "failure") {
+            throw new submission_1.PolicySubmissionError(result.failureKind, result.detail ?? `Control9 policy submission failed (${result.failureKind}).`, result.detail);
+        }
+        return result.decision;
+    }
+    async submitEnvelopeWithOutcome(request) {
         const url = buildSubmissionUrl(this.apiBaseUrl);
         let lastError;
         for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
@@ -33668,15 +33763,27 @@ class Control9PolicyClient {
                         await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
                         continue;
                     }
-                    throw new types_1.Control9ActionError(`Control9 policy API returned HTTP ${response.status} for envelope submission.`);
+                    return {
+                        status: "failure",
+                        failureKind: "unavailable_api",
+                        detail: `Control9 policy API returned HTTP ${response.status} for envelope submission.`,
+                    };
                 }
-                const payload = (await response.json());
-                return (0, normalize_1.normalizePolicyDecision)(payload);
+                try {
+                    const payload = (await response.json());
+                    const decision = (0, normalize_1.normalizePolicyDecision)(payload);
+                    return { status: "success", decision };
+                }
+                catch (error) {
+                    const detail = error instanceof Error ? error.message : "Control9 policy response could not be normalized.";
+                    return {
+                        status: "failure",
+                        failureKind: "malformed_response",
+                        detail,
+                    };
+                }
             }
             catch (error) {
-                if (error instanceof types_1.Control9ActionError) {
-                    throw error;
-                }
                 lastError = error instanceof Error ? error : new Error(String(error));
                 if (attempt < this.maxAttempts) {
                     await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
@@ -33684,7 +33791,18 @@ class Control9PolicyClient {
                 }
             }
         }
-        throw new types_1.Control9ActionError(`Control9 policy API submission failed after ${this.maxAttempts} attempts: ${lastError?.message ?? "unknown error"}.`);
+        if (lastError && (0, submission_1.isTimeoutError)(lastError)) {
+            return {
+                status: "failure",
+                failureKind: "timeout",
+                detail: lastError.message,
+            };
+        }
+        return {
+            status: "failure",
+            failureKind: "unavailable_api",
+            detail: `Control9 policy API submission failed after ${this.maxAttempts} attempts: ${lastError?.message ?? "unknown error"}.`,
+        };
     }
 }
 exports.Control9PolicyClient = Control9PolicyClient;
@@ -33753,6 +33871,86 @@ function normalizePolicyDecision(response) {
 
 /***/ }),
 
+/***/ 5020:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PolicySubmissionError = void 0;
+exports.isPolicySubmissionError = isPolicySubmissionError;
+exports.isTimeoutError = isTimeoutError;
+exports.classifySubmissionError = classifySubmissionError;
+exports.toSubmissionResult = toSubmissionResult;
+const types_1 = __nccwpck_require__(8522);
+class PolicySubmissionError extends Error {
+    failureKind;
+    detail;
+    constructor(failureKind, message, detail) {
+        super(message);
+        this.name = "PolicySubmissionError";
+        this.failureKind = failureKind;
+        this.detail = detail;
+    }
+}
+exports.PolicySubmissionError = PolicySubmissionError;
+function isPolicySubmissionError(error) {
+    return error instanceof PolicySubmissionError;
+}
+function isTimeoutError(error) {
+    if (error.name === "AbortError" || error.name === "TimeoutError") {
+        return true;
+    }
+    const message = error.message.toLowerCase();
+    return (message.includes("timed out") ||
+        message.includes("timeout") ||
+        message.includes("etimedout") ||
+        message.includes("time out"));
+}
+function classifySubmissionError(error) {
+    if (error instanceof PolicySubmissionError) {
+        return {
+            status: "failure",
+            failureKind: error.failureKind,
+            detail: error.detail ?? error.message,
+        };
+    }
+    if (error instanceof types_1.Control9ActionError) {
+        if (error.message.includes("policy response")) {
+            return {
+                status: "failure",
+                failureKind: "malformed_response",
+                detail: error.message,
+            };
+        }
+    }
+    if (error instanceof Error && isTimeoutError(error)) {
+        return {
+            status: "failure",
+            failureKind: "timeout",
+            detail: error.message,
+        };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+        status: "failure",
+        failureKind: "unavailable_api",
+        detail: message,
+    };
+}
+function toSubmissionResult(value) {
+    if ("status" in value && value.status === "failure") {
+        return value;
+    }
+    return {
+        status: "success",
+        decision: value,
+    };
+}
+
+
+/***/ }),
+
 /***/ 1206:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -33768,6 +33966,9 @@ function resolveBlockingBehavior(outcomeKind, runtimeMode) {
     if (outcomeKind === "allow") {
         return { isAdvisory: false, blocksWorkflow: false };
     }
+    if (outcomeKind === "malformed_response") {
+        return { isAdvisory: false, blocksWorkflow: true };
+    }
     if (runtimeMode === "shadow") {
         return { isAdvisory: outcomeKind === "require_approval", blocksWorkflow: false };
     }
@@ -33776,6 +33977,12 @@ function resolveBlockingBehavior(outcomeKind, runtimeMode) {
     }
     if (outcomeKind === "require_approval") {
         return { isAdvisory: false, blocksWorkflow: true };
+    }
+    if (outcomeKind === "unavailable_api" || outcomeKind === "timeout") {
+        return {
+            isAdvisory: false,
+            blocksWorkflow: runtimeMode === "enforce",
+        };
     }
     return { isAdvisory: false, blocksWorkflow: false };
 }
@@ -33787,6 +33994,8 @@ function renderDecisionFeedback(input) {
             return renderTimeout(input);
         case "unavailable_api":
             return renderUnavailableApi(input);
+        case "malformed_response":
+            return renderMalformedResponse(input);
         case "redaction_applied":
             return renderRedactionApplied(input);
         case "fingerprint_mismatch":
@@ -33826,8 +34035,9 @@ function renderPolicyDecision(input) {
 function renderTimeout(input) {
     const outcomeKind = "timeout";
     const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
-    const summary = (0, templates_1.buildTimeoutSummary)();
+    const summary = (0, templates_1.buildTimeoutSummary)(input.runtimeMode);
     const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
     return {
         outcomeKind,
         label: template.label,
@@ -33836,8 +34046,7 @@ function renderTimeout(input) {
         detailLines,
         bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
         annotationMessage: `${template.label} — ${summary}`,
-        isAdvisory: false,
-        blocksWorkflow: false,
+        ...behavior,
         metadata: {
             artifactFingerprint: input.artifactFingerprint,
             targetEnvironment: input.targetEnvironment,
@@ -33847,8 +34056,9 @@ function renderTimeout(input) {
 function renderUnavailableApi(input) {
     const outcomeKind = "unavailable_api";
     const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
-    const summary = (0, templates_1.buildUnavailableApiSummary)();
+    const summary = (0, templates_1.buildUnavailableApiSummary)(input.runtimeMode);
     const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
     return {
         outcomeKind,
         label: template.label,
@@ -33857,8 +34067,28 @@ function renderUnavailableApi(input) {
         detailLines,
         bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
         annotationMessage: `${template.label} — ${summary}`,
-        isAdvisory: false,
-        blocksWorkflow: false,
+        ...behavior,
+        metadata: {
+            artifactFingerprint: input.artifactFingerprint,
+            targetEnvironment: input.targetEnvironment,
+        },
+    };
+}
+function renderMalformedResponse(input) {
+    const outcomeKind = "malformed_response";
+    const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
+    const summary = (0, templates_1.buildMalformedResponseSummary)(input.detail);
+    const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+    return {
+        outcomeKind,
+        label: template.label,
+        title: template.title,
+        summary,
+        detailLines,
+        bodyMarkdown: (0, templates_1.buildBodyMarkdown)(template.title, summary, detailLines),
+        annotationMessage: `${template.label} — ${summary}`,
+        ...behavior,
         metadata: {
             artifactFingerprint: input.artifactFingerprint,
             targetEnvironment: input.targetEnvironment,
@@ -33929,6 +34159,7 @@ exports.formatFollowUpAction = formatFollowUpAction;
 exports.buildPolicyDecisionSummary = buildPolicyDecisionSummary;
 exports.buildTimeoutSummary = buildTimeoutSummary;
 exports.buildUnavailableApiSummary = buildUnavailableApiSummary;
+exports.buildMalformedResponseSummary = buildMalformedResponseSummary;
 exports.buildRedactionAppliedSummary = buildRedactionAppliedSummary;
 exports.buildFingerprintMismatchSummary = buildFingerprintMismatchSummary;
 exports.buildErrorDetailLines = buildErrorDetailLines;
@@ -33958,6 +34189,10 @@ exports.OUTCOME_TEMPLATES = {
     unavailable_api: {
         label: "Outcome: Policy API Unavailable",
         title: "Control9 policy API is unavailable",
+    },
+    malformed_response: {
+        label: "Outcome: Malformed Policy Response",
+        title: "Control9 received an invalid policy response",
     },
     redaction_applied: {
         label: "Outcome: Redaction Applied",
@@ -34019,11 +34254,26 @@ function buildPolicyDecisionSummary(outcomeKind, decision, runtimeMode) {
             return `${decision.reason} Control9 is reporting an advisory finding and this workflow is not blocked by that decision.`;
     }
 }
-function buildTimeoutSummary() {
-    return "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
+function buildTimeoutSummary(runtimeMode) {
+    const base = "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
+    if (runtimeMode === "shadow") {
+        return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+    }
+    return base;
 }
-function buildUnavailableApiSummary() {
-    return "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+function buildUnavailableApiSummary(runtimeMode) {
+    const base = "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+    if (runtimeMode === "shadow") {
+        return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+    }
+    return base;
+}
+function buildMalformedResponseSummary(detail) {
+    const base = "Control9 received a policy API response that could not be normalized into a decision.";
+    if (detail?.trim()) {
+        return `${base} ${detail.trim()}`;
+    }
+    return `${base} Review Control9 service logs and API contract compatibility before rerunning the job.`;
 }
 function buildRedactionAppliedSummary(report) {
     const status = formatRedactionStatus(report);
@@ -34041,6 +34291,9 @@ function buildErrorDetailLines(outcomeKind, options) {
     }
     if (options.artifactFingerprint) {
         lines.push(`Artifact fingerprint: ${options.artifactFingerprint}`);
+    }
+    if (outcomeKind === "malformed_response" && options.detail?.trim()) {
+        lines.push(`Response detail: ${options.detail.trim()}`);
     }
     if (outcomeKind === "redaction_applied" && options.redactionReport) {
         const status = formatRedactionStatus(options.redactionReport);

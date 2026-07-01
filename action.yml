@@ -54,7 +54,7 @@ outputs:
   decision-id:
     description: Control9 policy decision identifier.
   decision-kind:
-    description: Normalized decision kind (allow, deny, require_approval, or observe).
+    description: Normalized decision kind (allow, deny, require_approval, observe) or failure sentinel (unavailable_api, timeout, malformed_response).
   summary-path:
     description: Path to the local summary JSON written for workflow rendering.
   summary-written:

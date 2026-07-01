@@ -12,6 +12,7 @@ import {
   buildPolicyDecisionSummary,
   buildPolicyDetailLines,
   buildRedactionAppliedSummary,
+  buildMalformedResponseSummary,
   buildTimeoutSummary,
   buildUnavailableApiSummary,
   formatFollowUpAction,
@@ -30,6 +31,10 @@ function resolveBlockingBehavior(
     return { isAdvisory: false, blocksWorkflow: false };
   }
 
+  if (outcomeKind === "malformed_response") {
+    return { isAdvisory: false, blocksWorkflow: true };
+  }
+
   if (runtimeMode === "shadow") {
     return { isAdvisory: outcomeKind === "require_approval", blocksWorkflow: false };
   }
@@ -40,6 +45,13 @@ function resolveBlockingBehavior(
 
   if (outcomeKind === "require_approval") {
     return { isAdvisory: false, blocksWorkflow: true };
+  }
+
+  if (outcomeKind === "unavailable_api" || outcomeKind === "timeout") {
+    return {
+      isAdvisory: false,
+      blocksWorkflow: runtimeMode === "enforce",
+    };
   }
 
   return { isAdvisory: false, blocksWorkflow: false };
@@ -53,6 +65,8 @@ export function renderDecisionFeedback(input: DecisionRenderInput): RenderedDeci
       return renderTimeout(input);
     case "unavailable_api":
       return renderUnavailableApi(input);
+    case "malformed_response":
+      return renderMalformedResponse(input);
     case "redaction_applied":
       return renderRedactionApplied(input);
     case "fingerprint_mismatch":
@@ -99,8 +113,9 @@ function renderTimeout(
 ): RenderedDecisionFeedback {
   const outcomeKind = "timeout";
   const template = OUTCOME_TEMPLATES[outcomeKind];
-  const summary = buildTimeoutSummary();
+  const summary = buildTimeoutSummary(input.runtimeMode);
   const detailLines = buildErrorDetailLines(outcomeKind, input);
+  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
 
   return {
     outcomeKind,
@@ -110,8 +125,7 @@ function renderTimeout(
     detailLines,
     bodyMarkdown: buildBodyMarkdown(template.title, summary, detailLines),
     annotationMessage: `${template.label} — ${summary}`,
-    isAdvisory: false,
-    blocksWorkflow: false,
+    ...behavior,
     metadata: {
       artifactFingerprint: input.artifactFingerprint,
       targetEnvironment: input.targetEnvironment,
@@ -124,8 +138,9 @@ function renderUnavailableApi(
 ): RenderedDecisionFeedback {
   const outcomeKind = "unavailable_api";
   const template = OUTCOME_TEMPLATES[outcomeKind];
-  const summary = buildUnavailableApiSummary();
+  const summary = buildUnavailableApiSummary(input.runtimeMode);
   const detailLines = buildErrorDetailLines(outcomeKind, input);
+  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
 
   return {
     outcomeKind,
@@ -135,8 +150,32 @@ function renderUnavailableApi(
     detailLines,
     bodyMarkdown: buildBodyMarkdown(template.title, summary, detailLines),
     annotationMessage: `${template.label} — ${summary}`,
-    isAdvisory: false,
-    blocksWorkflow: false,
+    ...behavior,
+    metadata: {
+      artifactFingerprint: input.artifactFingerprint,
+      targetEnvironment: input.targetEnvironment,
+    },
+  };
+}
+
+function renderMalformedResponse(
+  input: Extract<DecisionRenderInput, { kind: "malformed_response" }>,
+): RenderedDecisionFeedback {
+  const outcomeKind = "malformed_response";
+  const template = OUTCOME_TEMPLATES[outcomeKind];
+  const summary = buildMalformedResponseSummary(input.detail);
+  const detailLines = buildErrorDetailLines(outcomeKind, input);
+  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+
+  return {
+    outcomeKind,
+    label: template.label,
+    title: template.title,
+    summary,
+    detailLines,
+    bodyMarkdown: buildBodyMarkdown(template.title, summary, detailLines),
+    annotationMessage: `${template.label} — ${summary}`,
+    ...behavior,
     metadata: {
       artifactFingerprint: input.artifactFingerprint,
       targetEnvironment: input.targetEnvironment,

@@ -2,7 +2,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { ActionEnvelope, PolicyDecision } from "./envelope/types";
-import type { ActionInputs, ActionResult, RoutedCommand, ValidationSummary } from "./types";
+import type { PolicySubmissionResult } from "./policy/submission";
+import type {
+  ActionInputs,
+  ActionResult,
+  OutputDecisionKind,
+  RoutedCommand,
+  ValidationSummary,
+} from "./types";
 
 export function buildValidationSummary(
   inputs: ActionInputs,
@@ -32,6 +39,35 @@ export function buildValidationSummary(
   };
 }
 
+export function buildFailureValidationSummary(
+  inputs: ActionInputs,
+  routed: RoutedCommand,
+  artifactFingerprint: string,
+  envelope: ActionEnvelope,
+  submission: Extract<PolicySubmissionResult, { status: "failure" }>,
+  summaryMessage: string,
+): ValidationSummary {
+  return {
+    mode: inputs.mode,
+    tenantId: inputs.tenantId,
+    targetEnvironment: inputs.targetEnvironment,
+    requestedAuthority: inputs.requestedAuthority,
+    iacTool: routed.iacTool,
+    command: routed.command,
+    artifactFingerprint,
+    artifactPaths: routed.artifactPaths,
+    redactionProfile: inputs.redactionProfile ?? "standard",
+    envelopeId: envelope.envelopeId,
+    correlationId: envelope.correlationId,
+    decisionId: "",
+    decisionKind: submission.failureKind,
+    decisionReason: summaryMessage,
+    redactionCount: envelope.redactionReport.totalRedactions,
+    status: "submission_failed",
+    message: summaryMessage,
+  };
+}
+
 export function writeSummaryFile(summary: ValidationSummary): string {
   const outputDirectory =
     process.env.RUNNER_TEMP?.trim() ||
@@ -47,13 +83,14 @@ export function buildActionResult(
   summaryPath: string,
   artifactFingerprint: string,
   envelope: ActionEnvelope,
-  decision: PolicyDecision,
+  decisionKind: OutputDecisionKind,
+  decisionId = "",
 ): ActionResult {
   return {
     envelopeId: envelope.envelopeId,
     artifactFingerprint,
-    decisionId: decision.decisionId,
-    decisionKind: decision.decisionKind,
+    decisionId,
+    decisionKind,
     summaryPath,
   };
 }
