@@ -68,6 +68,16 @@ Envelope construction reads GitLab predefined CI variables when the provider is 
 
 The component job downloads the tagged GitHub release asset containing `dist/index.js` (Node 20 bundle shared with the GitHub Action) before invoking the GitLab runner entrypoint. Customers pin `control9-version` to a reviewed tag.
 
-### Feedback in this milestone
+### Feedback in the component milestone
 
-GitLab jobs emit structured log lines and write the local summary JSON artifact. Non-zero exit codes signal enforce-mode blocking per `business_logic/error_handling.md`. Merge request comments and GitLab job report markdown sections are out of scope here and documented under the GitLab presentation contracts.
+GitLab jobs emit structured log lines and write the local summary JSON artifact. Non-zero exit codes signal enforce-mode blocking per `business_logic/error_handling.md`.
+
+### Feedback in the presentation milestone
+
+GitLab jobs additionally publish rich feedback per `interface/presentation.md`:
+
+- Collapsible job log sections for policy and deploy-verification outcomes.
+- Advisory/warning log prefixes before each section.
+- Merge request notes via GitLab REST API v4 when `CI_MERGE_REQUEST_IID` is set.
+
+MR note publishing uses `{CI_SERVER_URL}/api/v4`, project `CI_PROJECT_ID`, and merge request `CI_MERGE_REQUEST_IID`. Token resolution prefers masked CI variable `CONTROL9_GITLAB_TOKEN`, then `GITLAB_TOKEN`, then `CI_JOB_TOKEN`. Required OAuth scope is `api` for project access tokens and personal access tokens; job token permissions must allow `merge_requests` write when `CI_JOB_TOKEN` is used.
