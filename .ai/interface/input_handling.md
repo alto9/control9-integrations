@@ -18,8 +18,8 @@ Each rendered outcome uses a stable label, title, summary, and detail lines. Pol
 | `deny` | Decision: Deny | Control9 denied this change | Policy reason; in shadow mode append that the workflow was not blocked |
 | `require_approval` | Decision: Approval Required | Control9 requires approval for this change | Policy reason; in shadow mode append that the workflow is not waiting |
 | `observe` | Decision: Observe (Advisory) | Control9 advisory finding | Policy reason plus explicit non-blocking advisory wording |
-| `timeout` | Outcome: Policy API Timeout | Control9 policy request timed out | Instruct operator to review logs and service status before rerun |
-| `unavailable_api` | Outcome: Policy API Unavailable | Control9 policy API is unavailable | Instruct operator to review network, endpoint, and service status after bounded retries |
+| `timeout` | Outcome: Policy API Timeout | Control9 policy request timed out | Instruct operator to review logs and service status before rerun; when on a fail-open path, append that the workflow continued because this environment is configured to fail open on API unavailability |
+| `unavailable_api` | Outcome: Policy API Unavailable | Control9 policy API is unavailable | Instruct operator to review network, endpoint, and service status after bounded retries; when on a fail-open path, append that the workflow continued because this environment is configured to fail open on API unavailability |
 | `malformed_response` | Outcome: Malformed Policy Response | Control9 received an invalid policy response | State that the response could not be normalized and name the missing or invalid field class without echoing raw payload |
 | `redaction_applied` | Outcome: Redaction Applied | Control9 redaction was applied before submission | Report redaction counts and profile (pre-submit informational outcome) |
 | `fingerprint_mismatch` | Outcome: Fingerprint Mismatch | Control9 detected an artifact fingerprint mismatch | Compare expected vs actual fingerprint for deploy verification flows |

@@ -21,6 +21,11 @@ This doc describes configuration classes and safe defaults for the GitHub Action
 - Tenant or installation identity (required): stable tenant key supplied by Control9 onboarding.
 - Signing secret (required, secret input): HMAC signing material for envelope submission. Never logged or echoed.
 
+### Fail-open environment overrides
+
+- Fail-open environments (optional): comma-separated list of `target-environment` keys that may continue the workflow when the Control9 API is unavailable, even if `mode` is `enforce`. Values are trimmed and lowercased at parse time. Omitted or empty means every enforce run is treated as a protected enforce target for API failure purposes.
+- Typical use: list non-production environment keys such as `staging` or `dev` so enforce-mode staging workflows report API outages without blocking deploys, while production enforce steps remain fail-closed.
+
 ### Governed change context
 
 - Target environment (required): governed environment key such as `staging` or `production`.
@@ -45,6 +50,7 @@ This doc describes configuration classes and safe defaults for the GitHub Action
 | Setting | Default when omitted | Notes |
 |---------|---------------------|-------|
 | Runtime mode | `shadow` | First-install safe path |
+| Fail-open environments | (empty) | All enforce runs fail closed on API unavailability |
 | Working directory | `.` | Artifact paths resolve from repo root |
 | Redaction profile | `standard` | Built-in secret and token patterns |
 | Evidence capture | summary-only | No opt-in full-output input in shadow-mode milestone |

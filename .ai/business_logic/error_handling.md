@@ -21,18 +21,27 @@ After a successful envelope submission and response normalization, the action ha
 
 ## Policy API failure outcomes
 
-When the policy client cannot produce a normalized decision:
+When the policy client cannot produce a normalized decision, blocking follows the fail-open path vs protected enforce target matrix in the next section. Shadow mode is always a fail-open path. Enforce mode on a listed `fail-open-environments` target behaves like shadow for API unavailability only.
 
-| Condition | Retries | Rendered outcome | Shadow mode | Enforce mode |
-|-----------|---------|------------------|-------------|--------------|
-| Transient network or retryable HTTP status (`408`, `429`, `500`, `502`, `503`, `504`) | Bounded with exponential backoff | `unavailable_api` after exhaustion | Job continues (fail open) | Job fails (fail closed) |
+## Fail-open paths and protected enforce targets
+
+Blocking for API transport failures depends on whether the run is on a **fail-open path** or a **protected enforce target**:
+
+| Path class | Definition |
+|------------|------------|
+| Fail-open path | `mode` is `shadow`, or `mode` is `enforce` and the current `target-environment` is listed in optional `fail-open-environments` |
+| Protected enforce target | `mode` is `enforce` and the current `target-environment` is not listed in `fail-open-environments` (including when the list is empty or omitted) |
+
+When the policy or deploy verification client cannot produce a normalized outcome, apply this blocking matrix:
+
+| Condition | Retries | Rendered outcome | Fail-open path | Protected enforce target |
+|-----------|---------|------------------|----------------|--------------------------|
+| Transient network or retryable HTTP status (`408`, `429`, `500`, `502`, `503`, `504`) | Bounded with exponential backoff | `unavailable_api` after exhaustion | Job continues | Job fails |
 | Request timeout before a response is received | Same retry policy when detectable; otherwise classify as `unavailable_api` | `unavailable_api` or `timeout` | Job continues | Job fails |
-| HTTP 200 with missing or invalid decision fields | None | `malformed_response` | Job fails | Job fails |
+| HTTP 200 with missing or invalid decision or verification fields | None | `malformed_response` | Job fails | Job fails |
 | Non-retryable HTTP status (for example `400`, `401`, `403`, `404`) | None | `unavailable_api` with status detail | Job continues | Job fails |
 
-Malformed responses always fail the job in both modes because the action cannot publish a trustworthy governance decision.
-
-Configurable fail-open behavior for non-production or explicitly exempt targets beyond the shadow/enforce input is defined in enforce-mode configuration work; the baseline matrix above applies to the `mode` input alone.
+Fail-open configuration does not relax enforce-mode blocking for normalized policy outcomes (`deny`, `require_approval`) or deploy verification mismatch outcomes (`fingerprint_mismatch`, `no_approved_baseline`). Those remain governed by the policy decision and deploy verification tables above.
 
 ## Local pre-submit failures
 
@@ -55,4 +64,4 @@ When `command` is `deploy-verification`, outcomes come from the verification API
 | `fingerprint_mismatch` | Job continues (advisory) | Job fails |
 | `no_approved_baseline` | Job continues (advisory) | Job fails |
 
-Verification API transport and malformed-response handling mirrors the policy API failure table above (`unavailable_api`, `timeout`, `malformed_response` with the same mode matrix). Rendered feedback uses deploy verification presentation headings documented in `interface/presentation.md`.
+Verification API transport and malformed-response handling uses the same fail-open path vs protected enforce target matrix as policy API failures. Rendered feedback uses deploy verification presentation headings documented in `interface/presentation.md`.
