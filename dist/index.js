@@ -32330,6 +32330,31 @@ module.exports = {
 
 /***/ }),
 
+/***/ 4199:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isFailOpenPath = isFailOpenPath;
+exports.resolveApiFailureBlocksWorkflow = resolveApiFailureBlocksWorkflow;
+function isFailOpenPath(mode, targetEnvironment, failOpenEnvironments) {
+    if (mode === "shadow") {
+        return true;
+    }
+    const normalizedTarget = targetEnvironment.trim().toLowerCase();
+    return failOpenEnvironments.includes(normalizedTarget);
+}
+function resolveApiFailureBlocksWorkflow(options) {
+    if (options.failureKind === "malformed_response") {
+        return true;
+    }
+    return !isFailOpenPath(options.mode, options.targetEnvironment, options.failOpenEnvironments);
+}
+
+
+/***/ }),
+
 /***/ 1252:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -33236,6 +33261,7 @@ async function runPolicyFlow(options) {
         targetEnvironment: inputs.targetEnvironment,
         redactionReport: envelope.redactionReport,
         runtimeMode: inputs.mode,
+        failOpenEnvironments: inputs.failOpenEnvironments,
     });
     const summary = submission.status === "success"
         ? (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.decision)
@@ -33275,6 +33301,7 @@ async function runDeployVerificationFlow(options) {
         artifactFingerprint,
         targetEnvironment: inputs.targetEnvironment,
         runtimeMode: inputs.mode,
+        failOpenEnvironments: inputs.failOpenEnvironments,
     });
     const summary = submission.status === "success"
         ? (0, outputs_1.buildVerificationValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.verification)
@@ -33375,6 +33402,21 @@ function parseOptionalCommaSeparatedList(value) {
         .map((item) => item.trim())
         .filter(Boolean);
 }
+function parseFailOpenEnvironments(value) {
+    if (!value?.trim()) {
+        return [];
+    }
+    const seen = new Set();
+    const normalized = [];
+    for (const item of value.split(",")) {
+        const key = item.trim().toLowerCase();
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            normalized.push(key);
+        }
+    }
+    return normalized;
+}
 function validateApiUrl(value) {
     let parsed;
     try {
@@ -33402,6 +33444,7 @@ function parseActionInputs(raw) {
         workingDirectory: raw.workingDirectory?.trim() || ".",
         redactionProfile: raw.redactionProfile?.trim() || undefined,
         redactionAdditionalPatterns: parseOptionalCommaSeparatedList(raw.redactionAdditionalPatterns),
+        failOpenEnvironments: parseFailOpenEnvironments(raw.failOpenEnvironments),
     };
 }
 function readActionInputsFromEnv() {
@@ -33418,6 +33461,7 @@ function readActionInputsFromEnv() {
         workingDirectory: process.env.INPUT_WORKING_DIRECTORY,
         redactionProfile: process.env.INPUT_REDACTION_PROFILE,
         redactionAdditionalPatterns: process.env.INPUT_REDACTION_ADDITIONAL_PATTERNS,
+        failOpenEnvironments: process.env.INPUT_FAIL_OPEN_ENVIRONMENTS,
     });
 }
 
@@ -33432,13 +33476,8 @@ function readActionInputsFromEnv() {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.routeVerificationSubmissionOutcome = routeVerificationSubmissionOutcome;
 exports.routePolicySubmissionOutcome = routePolicySubmissionOutcome;
+const resolve_blocking_1 = __nccwpck_require__(4199);
 const decision_renderer_1 = __nccwpck_require__(1206);
-function resolveApiFailureBlocking(failureKind, runtimeMode) {
-    if (failureKind === "malformed_response") {
-        return true;
-    }
-    return runtimeMode === "enforce";
-}
 function resolveVerificationBlocking(verificationStatus, runtimeMode) {
     if (verificationStatus === "verified") {
         return false;
@@ -33446,7 +33485,7 @@ function resolveVerificationBlocking(verificationStatus, runtimeMode) {
     return runtimeMode === "enforce";
 }
 function routeVerificationSubmissionOutcome(options) {
-    const { submission, artifactFingerprint, targetEnvironment, runtimeMode } = options;
+    const { submission, artifactFingerprint, targetEnvironment, runtimeMode, failOpenEnvironments } = options;
     if (submission.status === "success") {
         const { verification } = submission;
         const renderInput = buildVerificationRenderInput({
@@ -33481,9 +33520,15 @@ function routeVerificationSubmissionOutcome(options) {
             artifactFingerprint,
             targetEnvironment,
             runtimeMode,
+            failOpenEnvironments,
         };
     const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
-    const blocksWorkflow = resolveApiFailureBlocking(submission.failureKind, runtimeMode);
+    const blocksWorkflow = (0, resolve_blocking_1.resolveApiFailureBlocksWorkflow)({
+        failureKind: submission.failureKind,
+        mode: runtimeMode,
+        targetEnvironment,
+        failOpenEnvironments,
+    });
     return {
         renderInput,
         rendered: {
@@ -33528,7 +33573,7 @@ function buildVerificationRenderInput(options) {
     }
 }
 function routePolicySubmissionOutcome(options) {
-    const { submission, artifactFingerprint, targetEnvironment, redactionReport, runtimeMode, } = options;
+    const { submission, artifactFingerprint, targetEnvironment, redactionReport, runtimeMode, failOpenEnvironments, } = options;
     if (submission.status === "success") {
         const renderInput = {
             kind: "policy_decision",
@@ -33560,9 +33605,15 @@ function routePolicySubmissionOutcome(options) {
             artifactFingerprint,
             targetEnvironment,
             runtimeMode,
+            failOpenEnvironments,
         };
     const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
-    const blocksWorkflow = resolveApiFailureBlocking(submission.failureKind, runtimeMode);
+    const blocksWorkflow = (0, resolve_blocking_1.resolveApiFailureBlocksWorkflow)({
+        failureKind: submission.failureKind,
+        mode: runtimeMode,
+        targetEnvironment,
+        failOpenEnvironments,
+    });
     return {
         renderInput,
         rendered: {
@@ -34176,8 +34227,9 @@ function toSubmissionResult(value) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.renderDecisionFeedback = renderDecisionFeedback;
+const resolve_blocking_1 = __nccwpck_require__(4199);
 const templates_1 = __nccwpck_require__(6019);
-function resolveBlockingBehavior(outcomeKind, runtimeMode) {
+function resolveBlockingBehavior(outcomeKind, runtimeMode, targetEnvironment, failOpenEnvironments) {
     if (outcomeKind === "observe") {
         return { isAdvisory: true, blocksWorkflow: false };
     }
@@ -34206,9 +34258,21 @@ function resolveBlockingBehavior(outcomeKind, runtimeMode) {
         return { isAdvisory: false, blocksWorkflow: true };
     }
     if (outcomeKind === "unavailable_api" || outcomeKind === "timeout") {
+        if (!runtimeMode || !targetEnvironment) {
+            return {
+                isAdvisory: false,
+                blocksWorkflow: runtimeMode === "enforce",
+            };
+        }
+        const blocksWorkflow = (0, resolve_blocking_1.resolveApiFailureBlocksWorkflow)({
+            failureKind: outcomeKind,
+            mode: runtimeMode,
+            targetEnvironment,
+            failOpenEnvironments: failOpenEnvironments ?? [],
+        });
         return {
-            isAdvisory: false,
-            blocksWorkflow: runtimeMode === "enforce",
+            isAdvisory: !blocksWorkflow,
+            blocksWorkflow,
         };
     }
     return { isAdvisory: false, blocksWorkflow: false };
@@ -34266,9 +34330,12 @@ function renderPolicyDecision(input) {
 function renderTimeout(input) {
     const outcomeKind = "timeout";
     const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
-    const summary = (0, templates_1.buildTimeoutSummary)(input.runtimeMode);
+    const failOpen = input.runtimeMode && input.targetEnvironment
+        ? (0, resolve_blocking_1.isFailOpenPath)(input.runtimeMode, input.targetEnvironment, input.failOpenEnvironments ?? [])
+        : false;
+    const summary = (0, templates_1.buildTimeoutSummary)(input.runtimeMode, failOpen);
     const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
-    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode, input.targetEnvironment, input.failOpenEnvironments);
     return {
         outcomeKind,
         label: template.label,
@@ -34287,9 +34354,12 @@ function renderTimeout(input) {
 function renderUnavailableApi(input) {
     const outcomeKind = "unavailable_api";
     const template = templates_1.OUTCOME_TEMPLATES[outcomeKind];
-    const summary = (0, templates_1.buildUnavailableApiSummary)(input.runtimeMode);
+    const failOpen = input.runtimeMode && input.targetEnvironment
+        ? (0, resolve_blocking_1.isFailOpenPath)(input.runtimeMode, input.targetEnvironment, input.failOpenEnvironments ?? [])
+        : false;
+    const summary = (0, templates_1.buildUnavailableApiSummary)(input.runtimeMode, failOpen);
     const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
-    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+    const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode, input.targetEnvironment, input.failOpenEnvironments);
     return {
         outcomeKind,
         label: template.label,
@@ -34541,17 +34611,23 @@ function buildPolicyDecisionSummary(outcomeKind, decision, runtimeMode) {
             return `${decision.reason} Control9 is reporting an advisory finding and this workflow is not blocked by that decision.`;
     }
 }
-function buildTimeoutSummary(runtimeMode) {
+function buildTimeoutSummary(runtimeMode, isFailOpenPath) {
     const base = "Control9 could not receive a policy decision before the configured request timeout expired. Review the workflow logs and Control9 service status, then rerun the job when the policy API is reachable.";
     if (runtimeMode === "shadow") {
         return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
     }
+    if (isFailOpenPath) {
+        return `${base} This workflow continued because this environment is configured to fail open on API unavailability.`;
+    }
     return base;
 }
-function buildUnavailableApiSummary(runtimeMode) {
+function buildUnavailableApiSummary(runtimeMode, isFailOpenPath) {
     const base = "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
     if (runtimeMode === "shadow") {
         return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
+    }
+    if (isFailOpenPath) {
+        return `${base} This workflow continued because this environment is configured to fail open on API unavailability.`;
     }
     return base;
 }

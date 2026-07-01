@@ -9,6 +9,13 @@ const redactionReport: RedactionReport = {
   markers: [],
 };
 
+const baseRouteOptions = {
+  artifactFingerprint: "fp-abc123",
+  targetEnvironment: "staging",
+  redactionReport,
+  failOpenEnvironments: [] as string[],
+};
+
 const baseDecision: PolicyDecision = {
   decisionId: "dec-allow-1",
   decisionKind: "allow",
@@ -31,9 +38,7 @@ describe("routePolicySubmissionOutcome", () => {
           reason: `${decisionKind} reason.`,
         },
       },
-      artifactFingerprint: "fp-abc123",
-      targetEnvironment: "staging",
-      redactionReport,
+      ...baseRouteOptions,
       runtimeMode: "shadow",
     });
 
@@ -58,9 +63,8 @@ describe("routePolicySubmissionOutcome", () => {
           failureKind,
           detail: `${failureKind} detail`,
         },
-        artifactFingerprint: "fp-abc123",
+        ...baseRouteOptions,
         targetEnvironment: "production",
-        redactionReport,
         runtimeMode,
       });
 
@@ -78,9 +82,7 @@ describe("routePolicySubmissionOutcome", () => {
         failureKind: "malformed_response",
         detail: "missing decision id",
       },
-      artifactFingerprint: "fp-1",
-      targetEnvironment: "staging",
-      redactionReport,
+      ...baseRouteOptions,
       runtimeMode: "enforce",
     });
     const unavailable = routePolicySubmissionOutcome({
@@ -89,9 +91,7 @@ describe("routePolicySubmissionOutcome", () => {
         failureKind: "unavailable_api",
         detail: "HTTP 503",
       },
-      artifactFingerprint: "fp-1",
-      targetEnvironment: "staging",
-      redactionReport,
+      ...baseRouteOptions,
       runtimeMode: "enforce",
     });
 
@@ -111,9 +111,8 @@ describe("routePolicySubmissionOutcome", () => {
           reason: "Denied.",
         },
       },
-      artifactFingerprint: "fp-deny",
+      ...baseRouteOptions,
       targetEnvironment: "production",
-      redactionReport,
       runtimeMode: "shadow",
     });
 
@@ -130,12 +129,34 @@ describe("routePolicySubmissionOutcome", () => {
           reason: "Denied.",
         },
       },
-      artifactFingerprint: "fp-deny",
+      ...baseRouteOptions,
       targetEnvironment: "production",
-      redactionReport,
       runtimeMode: "enforce",
     });
 
     expect(routed.blocksWorkflow).toBe(true);
   });
+
+  it.each([
+    ["unavailable_api", "staging", ["staging"], false],
+    ["timeout", "dev", ["staging", "dev"], false],
+  ] as const)(
+    "does not block enforce-mode %s when target environment is in fail-open list",
+    (failureKind, targetEnvironment, failOpenEnvironments, blocksWorkflow) => {
+      const routed = routePolicySubmissionOutcome({
+        submission: {
+          status: "failure",
+          failureKind,
+          detail: `${failureKind} detail`,
+        },
+        ...baseRouteOptions,
+        targetEnvironment,
+        runtimeMode: "enforce",
+        failOpenEnvironments,
+      });
+
+      expect(routed.blocksWorkflow).toBe(blocksWorkflow);
+      expect(routed.rendered.summary).toMatch(/configured to fail open on API unavailability/i);
+    },
+  );
 });

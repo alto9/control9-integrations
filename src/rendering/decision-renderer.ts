@@ -1,4 +1,5 @@
 import type { RuntimeMode } from "../types";
+import { isFailOpenPath, resolveApiFailureBlocksWorkflow } from "../blocking/resolve-blocking";
 import type {
   DecisionRenderInput,
   RenderedDecisionFeedback,
@@ -24,6 +25,8 @@ import {
 function resolveBlockingBehavior(
   outcomeKind: RenderOutcomeKind,
   runtimeMode: RuntimeMode | undefined,
+  targetEnvironment?: string,
+  failOpenEnvironments?: string[],
 ): { isAdvisory: boolean; blocksWorkflow: boolean } {
   if (outcomeKind === "observe") {
     return { isAdvisory: true, blocksWorkflow: false };
@@ -61,9 +64,23 @@ function resolveBlockingBehavior(
   }
 
   if (outcomeKind === "unavailable_api" || outcomeKind === "timeout") {
+    if (!runtimeMode || !targetEnvironment) {
+      return {
+        isAdvisory: false,
+        blocksWorkflow: runtimeMode === "enforce",
+      };
+    }
+
+    const blocksWorkflow = resolveApiFailureBlocksWorkflow({
+      failureKind: outcomeKind,
+      mode: runtimeMode,
+      targetEnvironment,
+      failOpenEnvironments: failOpenEnvironments ?? [],
+    });
+
     return {
-      isAdvisory: false,
-      blocksWorkflow: runtimeMode === "enforce",
+      isAdvisory: !blocksWorkflow,
+      blocksWorkflow,
     };
   }
 
@@ -130,9 +147,22 @@ function renderTimeout(
 ): RenderedDecisionFeedback {
   const outcomeKind = "timeout";
   const template = OUTCOME_TEMPLATES[outcomeKind];
-  const summary = buildTimeoutSummary(input.runtimeMode);
+  const failOpen =
+    input.runtimeMode && input.targetEnvironment
+      ? isFailOpenPath(
+          input.runtimeMode,
+          input.targetEnvironment,
+          input.failOpenEnvironments ?? [],
+        )
+      : false;
+  const summary = buildTimeoutSummary(input.runtimeMode, failOpen);
   const detailLines = buildErrorDetailLines(outcomeKind, input);
-  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+  const behavior = resolveBlockingBehavior(
+    outcomeKind,
+    input.runtimeMode,
+    input.targetEnvironment,
+    input.failOpenEnvironments,
+  );
 
   return {
     outcomeKind,
@@ -155,9 +185,22 @@ function renderUnavailableApi(
 ): RenderedDecisionFeedback {
   const outcomeKind = "unavailable_api";
   const template = OUTCOME_TEMPLATES[outcomeKind];
-  const summary = buildUnavailableApiSummary(input.runtimeMode);
+  const failOpen =
+    input.runtimeMode && input.targetEnvironment
+      ? isFailOpenPath(
+          input.runtimeMode,
+          input.targetEnvironment,
+          input.failOpenEnvironments ?? [],
+        )
+      : false;
+  const summary = buildUnavailableApiSummary(input.runtimeMode, failOpen);
   const detailLines = buildErrorDetailLines(outcomeKind, input);
-  const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode);
+  const behavior = resolveBlockingBehavior(
+    outcomeKind,
+    input.runtimeMode,
+    input.targetEnvironment,
+    input.failOpenEnvironments,
+  );
 
   return {
     outcomeKind,

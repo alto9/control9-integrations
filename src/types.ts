@@ -27,6 +27,7 @@ export interface ActionInputs {
   workingDirectory: string;
   redactionProfile?: string;
   redactionAdditionalPatterns: string[];
+  failOpenEnvironments: string[];
 }
 
 export interface RoutedCommand {

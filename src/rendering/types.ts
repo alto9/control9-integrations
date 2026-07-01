@@ -33,6 +33,7 @@ export interface TimeoutRenderInput {
   artifactFingerprint?: string;
   targetEnvironment?: string;
   runtimeMode?: RuntimeMode;
+  failOpenEnvironments?: string[];
 }
 
 export interface UnavailableApiRenderInput {
@@ -40,6 +41,7 @@ export interface UnavailableApiRenderInput {
   artifactFingerprint?: string;
   targetEnvironment?: string;
   runtimeMode?: RuntimeMode;
+  failOpenEnvironments?: string[];
 }
 
 export interface MalformedResponseRenderInput {

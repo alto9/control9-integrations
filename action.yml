@@ -45,6 +45,9 @@ inputs:
   redaction-additional-patterns:
     description: Optional comma-separated extra redaction patterns applied before envelope construction.
     required: false
+  fail-open-environments:
+    description: Optional comma-separated target-environment keys that may continue the workflow when the Control9 API is unavailable, even if mode is enforce. Values are trimmed and lowercased at parse time. Omitted or empty means every enforce run is treated as a protected enforce target for API failure purposes.
+    required: false
 
 outputs:
   envelope-id:
