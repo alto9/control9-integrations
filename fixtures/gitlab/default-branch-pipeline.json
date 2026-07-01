@@ -1,0 +1,40 @@
+{
+  "description": "GitLab predefined CI variables for a default-branch push pipeline.",
+  "env": {
+    "CI_PROJECT_PATH": "acme/platform/infra",
+    "CI_PIPELINE_ID": "555001",
+    "CI_JOB_ID": "777001",
+    "CI_PIPELINE_SOURCE": "push",
+    "CI_JOB_NAME": "control9-assessment",
+    "CI_COMMIT_REF_NAME": "main",
+    "CI_COMMIT_SHA": "abc123abc123abc123abc123abc123abc123ab",
+    "GITLAB_USER_LOGIN": "release.bot",
+    "CI_SERVER_URL": "https://gitlab.example.com"
+  },
+  "expected": {
+    "providerContext": {
+      "provider": "gitlab",
+      "apiUrl": "https://gitlab.example.com"
+    },
+    "runIdentity": {
+      "runId": "555001",
+      "runAttempt": "777001",
+      "workflow": "push",
+      "job": "control9-assessment"
+    },
+    "repositoryIdentity": {
+      "owner": "acme/platform",
+      "name": "infra",
+      "fullName": "acme/platform/infra"
+    },
+    "refOrPullRequestIdentity": {
+      "ref": "main",
+      "sha": "abc123abc123abc123abc123abc123abc123ab"
+    },
+    "actorIdentity": {
+      "login": "release.bot",
+      "actorType": "User"
+    },
+    "correlationId": "555001:777001"
+  }
+}

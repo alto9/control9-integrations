@@ -1,6 +1,50 @@
+import { readFileSync } from "node:fs";
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readGitLabWorkflowContext } from "../src/envelope/gitlab-context";
+
+interface GitLabPipelineFixture {
+  description: string;
+  env: Record<string, string>;
+  expected: {
+    providerContext: { provider: string; apiUrl?: string };
+    runIdentity: { runId: string; runAttempt: string; workflow: string; job: string };
+    repositoryIdentity: { owner: string; name: string; fullName: string };
+    refOrPullRequestIdentity: {
+      ref: string;
+      sha: string;
+      pullRequestNumber?: number;
+    };
+    actorIdentity: { login: string; actorType: string };
+    correlationId: string;
+  };
+}
+
+const defaultBranchFixture = JSON.parse(
+  readFileSync("fixtures/gitlab/default-branch-pipeline.json", "utf8"),
+) as GitLabPipelineFixture;
+const mergeRequestFixture = JSON.parse(
+  readFileSync("fixtures/gitlab/merge-request-pipeline.json", "utf8"),
+) as GitLabPipelineFixture;
+
+function applyGitLabEnv(env: Record<string, string>): void {
+  for (const key of [
+    "CI_PROJECT_PATH",
+    "CI_PIPELINE_ID",
+    "CI_JOB_ID",
+    "CI_PIPELINE_SOURCE",
+    "CI_JOB_NAME",
+    "CI_COMMIT_REF_NAME",
+    "CI_COMMIT_SHA",
+    "CI_MERGE_REQUEST_IID",
+    "GITLAB_USER_LOGIN",
+    "CI_SERVER_URL",
+  ]) {
+    delete process.env[key];
+  }
+  Object.assign(process.env, env);
+}
 
 describe("readGitLabWorkflowContext", () => {
   let previousEnv: NodeJS.ProcessEnv;
@@ -13,45 +57,20 @@ describe("readGitLabWorkflowContext", () => {
     process.env = previousEnv;
   });
 
-  it("maps GitLab predefined CI variables to the shared workflow context shape", () => {
-    process.env.CI_PROJECT_PATH = "acme/platform/infra";
-    process.env.CI_PIPELINE_ID = "987654";
-    process.env.CI_JOB_ID = "1234567";
-    process.env.CI_PIPELINE_SOURCE = "merge_request_event";
-    process.env.CI_JOB_NAME = "control9-assessment";
-    process.env.CI_COMMIT_REF_NAME = "feature/gitlab";
-    process.env.CI_COMMIT_SHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-    process.env.CI_MERGE_REQUEST_IID = "42";
-    process.env.GITLAB_USER_LOGIN = "dev.user";
-    process.env.CI_SERVER_URL = "https://gitlab.example.com";
+  it.each([
+    ["default-branch-pipeline.json", defaultBranchFixture],
+    ["merge-request-pipeline.json", mergeRequestFixture],
+  ] as const)("maps %s fixture CI variables to the shared workflow context shape", (_file, fixture) => {
+    applyGitLabEnv(fixture.env);
 
     const context = readGitLabWorkflowContext();
 
-    expect(context.providerContext).toEqual({
-      provider: "gitlab",
-      apiUrl: "https://gitlab.example.com",
-    });
-    expect(context.runIdentity).toEqual({
-      runId: "987654",
-      runAttempt: "1234567",
-      workflow: "merge_request_event",
-      job: "control9-assessment",
-    });
-    expect(context.repositoryIdentity).toEqual({
-      owner: "acme/platform",
-      name: "infra",
-      fullName: "acme/platform/infra",
-    });
-    expect(context.refOrPullRequestIdentity).toEqual({
-      ref: "feature/gitlab",
-      sha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-      pullRequestNumber: 42,
-    });
-    expect(context.actorIdentity).toEqual({
-      login: "dev.user",
-      actorType: "User",
-    });
-    expect(context.correlationId).toBe("987654:1234567");
+    expect(context.providerContext).toEqual(fixture.expected.providerContext);
+    expect(context.runIdentity).toEqual(fixture.expected.runIdentity);
+    expect(context.repositoryIdentity).toEqual(fixture.expected.repositoryIdentity);
+    expect(context.refOrPullRequestIdentity).toEqual(fixture.expected.refOrPullRequestIdentity);
+    expect(context.actorIdentity).toEqual(fixture.expected.actorIdentity);
+    expect(context.correlationId).toBe(fixture.expected.correlationId);
   });
 
   it("falls back to job name for workflow when pipeline source is absent", () => {
