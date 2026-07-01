@@ -2,6 +2,7 @@ import type { ActionInputs, RoutedCommand } from "../types";
 import { Control9ActionError } from "../types";
 import { fingerprintArtifacts } from "../routing";
 import { readGitHubWorkflowContext } from "./github-context";
+import type { WorkflowContext } from "./types";
 import { buildUnsignedEnvelopeId, signEnvelope } from "./sign";
 import { containsRawSecretMarkers, redactPayload } from "./redact";
 import { buildNormalizedChangeSummary } from "./summary";
@@ -11,7 +12,10 @@ import { validateActionEnvelopeSchema } from "./validate-schema";
 
 export interface BuildEnvelopeOptions {
   signedAt?: string;
-  githubContext?: ReturnType<typeof readGitHubWorkflowContext>;
+  /** Injected CI workflow context; defaults to GitHub when omitted. */
+  workflowContext?: WorkflowContext;
+  /** @deprecated Use {@link BuildEnvelopeOptions.workflowContext} */
+  githubContext?: WorkflowContext;
 }
 
 function buildArtifactFingerprints(routed: RoutedCommand): ArtifactFingerprintEntry[] {
@@ -26,7 +30,8 @@ export function buildSignedActionEnvelope(
   routed: RoutedCommand,
   options: BuildEnvelopeOptions = {},
 ): ActionEnvelope {
-  const githubContext = options.githubContext ?? readGitHubWorkflowContext();
+  const workflowContext =
+    options.workflowContext ?? options.githubContext ?? readGitHubWorkflowContext();
   const rawSummary = buildNormalizedChangeSummary(inputs, routed);
   const redactionProfile = inputs.redactionProfile ?? "standard";
   const { redacted, report } = redactPayload(
@@ -43,15 +48,15 @@ export function buildSignedActionEnvelope(
 
   const unsignedBody = {
     schemaVersion: ENVELOPE_SCHEMA_VERSION,
-    correlationId: githubContext.correlationId,
-    providerContext: githubContext.providerContext,
-    runIdentity: githubContext.runIdentity,
+    correlationId: workflowContext.correlationId,
+    providerContext: workflowContext.providerContext,
+    runIdentity: workflowContext.runIdentity,
     tenantIdentity: {
       tenantId: inputs.tenantId,
     },
-    repositoryIdentity: githubContext.repositoryIdentity,
-    refOrPullRequestIdentity: githubContext.refOrPullRequestIdentity,
-    actorIdentity: githubContext.actorIdentity,
+    repositoryIdentity: workflowContext.repositoryIdentity,
+    refOrPullRequestIdentity: workflowContext.refOrPullRequestIdentity,
+    actorIdentity: workflowContext.actorIdentity,
     commandCategory: routed.command,
     iacTool: routed.iacTool,
     environment: inputs.targetEnvironment,

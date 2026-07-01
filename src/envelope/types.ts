@@ -2,11 +2,18 @@ import type { CommandCategory, DecisionKind, IacTool, RuntimeMode } from "../typ
 
 export const ENVELOPE_SCHEMA_VERSION = "control9.action-envelope.v0" as const;
 
-export interface ProviderContext {
+export interface GitHubProviderContext {
   provider: "github";
   eventName?: string;
   apiUrl?: string;
 }
+
+export interface GitLabProviderContext {
+  provider: "gitlab";
+  apiUrl?: string;
+}
+
+export type ProviderContext = GitHubProviderContext | GitLabProviderContext;
 
 export interface RunIdentity {
   runId: string;
@@ -95,7 +102,7 @@ export interface ActionEnvelope extends UnsignedActionEnvelope {
   signature: SignatureMetadata;
 }
 
-export interface GitHubWorkflowContext {
+export interface WorkflowContext {
   providerContext: ProviderContext;
   runIdentity: RunIdentity;
   repositoryIdentity: RepositoryIdentity;
@@ -103,6 +110,9 @@ export interface GitHubWorkflowContext {
   actorIdentity: ActorIdentity;
   correlationId: string;
 }
+
+/** @deprecated Use {@link WorkflowContext} */
+export type GitHubWorkflowContext = WorkflowContext;
 
 export interface PolicyDecision {
   decisionId: string;

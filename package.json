@@ -5,7 +5,9 @@
   "description": "GitHub Action that builds redacted, signed Control9 action envelopes from IaC artifacts",
   "main": "dist/index.js",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build": "npm run build:github && npm run build:gitlab",
+    "build:github": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build:gitlab": "ncc build src/gitlab/index.ts -o dist/gitlab --source-map --license licenses.txt",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -1982,7 +1982,7 @@ const http = __importStar(__nccwpck_require__(8611));
 const https = __importStar(__nccwpck_require__(5692));
 const pm = __importStar(__nccwpck_require__(4988));
 const tunnel = __importStar(__nccwpck_require__(770));
-const undici_1 = __nccwpck_require__(6752);
+const undici_1 = __nccwpck_require__(4371);
 var HttpCodes;
 (function (HttpCodes) {
     HttpCodes[HttpCodes["OK"] = 200] = "OK";
@@ -10162,7 +10162,7 @@ exports.debug = debug; // for test
 
 /***/ }),
 
-/***/ 6752:
+/***/ 4371:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -10923,7 +10923,7 @@ module.exports = pipeline
 
 /***/ }),
 
-/***/ 4043:
+/***/ 6424:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -11458,7 +11458,7 @@ module.exports = upgrade
 "use strict";
 
 
-module.exports.request = __nccwpck_require__(4043)
+module.exports.request = __nccwpck_require__(6424)
 module.exports.stream = __nccwpck_require__(3560)
 module.exports.pipeline = __nccwpck_require__(6862)
 module.exports.upgrade = __nccwpck_require__(1882)
@@ -30358,7 +30358,7 @@ module.exports = {
 
 
 const diagnosticsChannel = __nccwpck_require__(1637)
-const { uid, states } = __nccwpck_require__(5913)
+const { uid, states } = __nccwpck_require__(8294)
 const {
   kReadyState,
   kSentClose,
@@ -30650,7 +30650,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 5913:
+/***/ 8294:
 /***/ ((module) => {
 
 "use strict";
@@ -31026,7 +31026,7 @@ module.exports = {
 "use strict";
 
 
-const { maxUnsigned16Bit } = __nccwpck_require__(5913)
+const { maxUnsigned16Bit } = __nccwpck_require__(8294)
 
 /** @type {import('crypto')} */
 let crypto
@@ -31109,7 +31109,7 @@ module.exports = {
 
 const { Writable } = __nccwpck_require__(2203)
 const diagnosticsChannel = __nccwpck_require__(1637)
-const { parserStates, opcodes, states, emptyBuffer } = __nccwpck_require__(5913)
+const { parserStates, opcodes, states, emptyBuffer } = __nccwpck_require__(8294)
 const { kReadyState, kSentClose, kResponse, kReceivedClose } = __nccwpck_require__(2933)
 const { isValidStatusCode, failWebsocketConnection, websocketMessageReceived } = __nccwpck_require__(3574)
 const { WebsocketFrameSend } = __nccwpck_require__(1237)
@@ -31480,7 +31480,7 @@ module.exports = {
 
 
 const { kReadyState, kController, kResponse, kBinaryType, kWebSocketURL } = __nccwpck_require__(2933)
-const { states, opcodes } = __nccwpck_require__(5913)
+const { states, opcodes } = __nccwpck_require__(8294)
 const { MessageEvent, ErrorEvent } = __nccwpck_require__(6255)
 
 /* globals Blob */
@@ -31691,7 +31691,7 @@ const { webidl } = __nccwpck_require__(4222)
 const { DOMException } = __nccwpck_require__(7326)
 const { URLSerializer } = __nccwpck_require__(4322)
 const { getGlobalOrigin } = __nccwpck_require__(5628)
-const { staticPropertyDescriptors, states, opcodes, emptyBuffer } = __nccwpck_require__(5913)
+const { staticPropertyDescriptors, states, opcodes, emptyBuffer } = __nccwpck_require__(8294)
 const {
   kWebSocketURL,
   kReadyState,
@@ -32507,6 +32507,87 @@ function readGitHubWorkflowContext() {
 
 /***/ }),
 
+/***/ 3923:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.readGitLabWorkflowContext = readGitLabWorkflowContext;
+const node_crypto_1 = __nccwpck_require__(7598);
+function readEnv(name, fallback) {
+    const value = process.env[name]?.trim();
+    if (value) {
+        return value;
+    }
+    if (fallback !== undefined) {
+        return fallback;
+    }
+    return "";
+}
+function parseProjectPath(fullPath) {
+    const segments = fullPath.split("/").filter(Boolean);
+    if (segments.length === 0) {
+        return { owner: "local-group", name: "local-project" };
+    }
+    if (segments.length === 1) {
+        return { owner: segments[0] ?? "local-group", name: segments[0] ?? "local-project" };
+    }
+    return {
+        owner: segments.slice(0, -1).join("/"),
+        name: segments[segments.length - 1] ?? "local-project",
+    };
+}
+function parseMergeRequestNumber() {
+    const raw = readEnv("CI_MERGE_REQUEST_IID");
+    if (!raw) {
+        return undefined;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+function readGitLabWorkflowContext() {
+    const fullName = readEnv("CI_PROJECT_PATH", "local-group/local-project");
+    const { owner, name } = parseProjectPath(fullName);
+    const pipelineId = readEnv("CI_PIPELINE_ID");
+    const jobId = readEnv("CI_JOB_ID");
+    const correlationId = pipelineId && jobId ? `${pipelineId}:${jobId}` : (0, node_crypto_1.randomUUID)();
+    const pipelineSource = readEnv("CI_PIPELINE_SOURCE");
+    const jobName = readEnv("CI_JOB_NAME", "local-job");
+    const workflow = pipelineSource || jobName;
+    const login = readEnv("GITLAB_USER_LOGIN", "local-user");
+    return {
+        correlationId,
+        providerContext: {
+            provider: "gitlab",
+            apiUrl: readEnv("CI_SERVER_URL", "https://gitlab.com") || undefined,
+        },
+        runIdentity: {
+            runId: pipelineId || "0",
+            runAttempt: jobId || "1",
+            workflow,
+            job: jobName,
+        },
+        repositoryIdentity: {
+            owner,
+            name,
+            fullName,
+        },
+        refOrPullRequestIdentity: {
+            ref: readEnv("CI_COMMIT_REF_NAME", "main"),
+            sha: readEnv("CI_COMMIT_SHA", "0000000000000000000000000000000000000000"),
+            pullRequestNumber: parseMergeRequestNumber(),
+        },
+        actorIdentity: {
+            login,
+            actorType: login.endsWith("[bot]") || login.endsWith("_bot") ? "Bot" : "User",
+        },
+    };
+}
+
+
+/***/ }),
+
 /***/ 6755:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -33180,49 +33261,55 @@ async function publishWorkflowFeedback(input, deps = {}) {
 
 /***/ }),
 
-/***/ 9407:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+/***/ 1995:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.runAction = runAction;
-const core = __importStar(__nccwpck_require__(7484));
-const build_1 = __nccwpck_require__(1252);
+exports.buildBaselineLogLines = buildBaselineLogLines;
+exports.publishBaselineLogFeedback = publishBaselineLogFeedback;
 const workflow_summary_1 = __nccwpck_require__(3151);
+function resolveSectionHeading(presentation = "policy") {
+    return presentation === "deploy-verification"
+        ? workflow_summary_1.DEPLOY_VERIFICATION_SECTION_HEADING
+        : workflow_summary_1.SUMMARY_SECTION_HEADING;
+}
+function buildBaselineLogLines(rendered, presentation = "policy") {
+    const heading = resolveSectionHeading(presentation);
+    const prefix = rendered.blocksWorkflow ? "Control9 WARNING" : "Control9 NOTICE";
+    return [
+        `${prefix}: ${rendered.label} — ${rendered.summary}`,
+        heading,
+        rendered.title,
+        rendered.summary,
+        ...rendered.detailLines.map((line) => `- ${line}`),
+    ];
+}
+function publishBaselineLogFeedback(input) {
+    const presentation = input.presentation ?? "policy";
+    for (const line of buildBaselineLogLines(input.rendered, presentation)) {
+        console.log(line);
+    }
+    if (input.summaryPath) {
+        console.log(`Control9 summary JSON: ${input.summaryPath}`);
+    }
+    return { summaryWritten: false };
+}
+
+
+/***/ }),
+
+/***/ 7965:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CONTROL9_PROVIDER_ENV = void 0;
+exports.runGitLabAssessment = runGitLabAssessment;
+const build_1 = __nccwpck_require__(1252);
+const gitlab_context_1 = __nccwpck_require__(3923);
 const inputs_1 = __nccwpck_require__(8422);
 const route_1 = __nccwpck_require__(3876);
 const outputs_1 = __nccwpck_require__(7729);
@@ -33230,11 +33317,17 @@ const client_1 = __nccwpck_require__(867);
 const routing_1 = __nccwpck_require__(6357);
 const types_1 = __nccwpck_require__(8522);
 const client_2 = __nccwpck_require__(6276);
-async function runAction() {
+const log_output_1 = __nccwpck_require__(1995);
+exports.CONTROL9_PROVIDER_ENV = "CONTROL9_PROVIDER";
+async function runGitLabAssessment() {
+    if (!process.env[exports.CONTROL9_PROVIDER_ENV]?.trim()) {
+        process.env[exports.CONTROL9_PROVIDER_ENV] = "gitlab";
+    }
     const inputs = (0, inputs_1.readActionInputsFromEnv)();
     const routed = (0, routing_1.routeCommand)(inputs);
     const artifactFingerprint = (0, routing_1.fingerprintArtifacts)(routed.resolvedArtifactPaths);
-    const envelope = (0, build_1.buildSignedActionEnvelope)(inputs, routed);
+    const workflowContext = (0, gitlab_context_1.readGitLabWorkflowContext)();
+    const envelope = (0, build_1.buildSignedActionEnvelope)(inputs, routed, { workflowContext });
     if (inputs.command === "deploy-verification") {
         await runDeployVerificationFlow({
             inputs,
@@ -33267,27 +33360,18 @@ async function runPolicyFlow(options) {
         ? (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.decision)
         : (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
-    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
+    (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
         decisionKind: routedOutcome.decisionKindOutput,
         decisionId: submission.status === "success" ? submission.decision.decisionId : "",
     });
-    const feedback = await (0, workflow_summary_1.publishWorkflowFeedback)({
+    (0, log_output_1.publishBaselineLogFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
         presentation: "policy",
     });
-    core.setOutput("envelope-id", result.envelopeId);
-    core.setOutput("artifact-fingerprint", result.artifactFingerprint);
-    core.setOutput("decision-id", result.decisionId);
-    core.setOutput("decision-kind", result.decisionKind);
-    core.setOutput("verification-id", result.verificationId);
-    core.setOutput("verification-status", result.verificationStatus);
-    core.setOutput("summary-path", result.summaryPath);
-    core.setOutput("summary-written", String(feedback.summaryWritten));
-    core.setOutput("pr-comment-state", feedback.prCommentState);
-    core.info(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${result.envelopeId} in ${inputs.mode} mode.`);
-    core.info(`Outcome ${result.decisionKind}: ${summary.message}`);
-    core.info(`Summary written to ${summaryPath}.`);
+    console.log(`Control9 submitted ${inputs.iacTool} ${inputs.command} envelope ${envelope.envelopeId} in ${inputs.mode} mode.`);
+    console.log(`Outcome ${routedOutcome.decisionKindOutput}: ${summary.message}`);
+    console.log(`Summary written to ${summaryPath}.`);
     if (routedOutcome.blocksWorkflow) {
         throw new types_1.Control9ActionError(routedOutcome.rendered.summary);
     }
@@ -33307,46 +33391,23 @@ async function runDeployVerificationFlow(options) {
         ? (0, outputs_1.buildVerificationValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.verification)
         : (0, outputs_1.buildVerificationFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
-    const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
+    (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
         verificationId: submission.status === "success" ? submission.verification.verificationId : "",
         verificationStatus: routedOutcome.verificationStatusOutput,
         decisionId: submission.status === "success" ? (submission.verification.decisionId ?? "") : "",
     });
-    const feedback = await (0, workflow_summary_1.publishWorkflowFeedback)({
+    (0, log_output_1.publishBaselineLogFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
         presentation: "deploy-verification",
     });
-    core.setOutput("envelope-id", result.envelopeId);
-    core.setOutput("artifact-fingerprint", result.artifactFingerprint);
-    core.setOutput("decision-id", result.decisionId);
-    core.setOutput("decision-kind", result.decisionKind);
-    core.setOutput("verification-id", result.verificationId);
-    core.setOutput("verification-status", result.verificationStatus);
-    core.setOutput("summary-path", result.summaryPath);
-    core.setOutput("summary-written", String(feedback.summaryWritten));
-    core.setOutput("pr-comment-state", feedback.prCommentState);
-    core.info(`Control9 submitted ${inputs.iacTool} deploy verification envelope ${result.envelopeId} in ${inputs.mode} mode.`);
-    core.info(`Verification ${result.verificationStatus}: ${summary.message}`);
-    core.info(`Summary written to ${summaryPath}.`);
+    console.log(`Control9 submitted ${inputs.iacTool} deploy verification envelope ${envelope.envelopeId} in ${inputs.mode} mode.`);
+    console.log(`Verification ${routedOutcome.verificationStatusOutput}: ${summary.message}`);
+    console.log(`Summary written to ${summaryPath}.`);
     if (routedOutcome.blocksWorkflow) {
         throw new types_1.Control9ActionError(routedOutcome.rendered.summary);
     }
 }
-async function main() {
-    try {
-        await runAction();
-    }
-    catch (error) {
-        if (error instanceof types_1.Control9ActionError) {
-            core.setFailed(error.message);
-            return;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        core.setFailed(`Control9 action failed unexpectedly: ${message}`);
-    }
-}
-void main();
 
 
 /***/ }),
@@ -40256,7 +40317,7 @@ var Alias = __nccwpck_require__(4065);
 var Collection = __nccwpck_require__(101);
 var identity = __nccwpck_require__(1127);
 var Pair = __nccwpck_require__(7165);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 var Schema = __nccwpck_require__(5840);
 var stringifyDocument = __nccwpck_require__(6829);
 var anchors = __nccwpck_require__(1596);
@@ -41189,7 +41250,7 @@ var anchors = __nccwpck_require__(1596);
 var visit = __nccwpck_require__(204);
 var identity = __nccwpck_require__(1127);
 var Node = __nccwpck_require__(6673);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 
 class Alias extends Node.NodeBase {
     constructor(source) {
@@ -41472,7 +41533,7 @@ exports.isEmptyPath = isEmptyPath;
 
 var applyReviver = __nccwpck_require__(3661);
 var identity = __nccwpck_require__(1127);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 
 class NodeBase {
     constructor(type) {
@@ -41567,7 +41628,7 @@ exports.createPair = createPair;
 
 var identity = __nccwpck_require__(1127);
 var Node = __nccwpck_require__(6673);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 
 const isScalarValue = (value) => !value || (typeof value !== 'function' && typeof value !== 'object');
 class Scalar extends Node.NodeBase {
@@ -41760,7 +41821,7 @@ var stringifyCollection = __nccwpck_require__(1212);
 var Collection = __nccwpck_require__(101);
 var identity = __nccwpck_require__(1127);
 var Scalar = __nccwpck_require__(3301);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 
 class YAMLSeq extends Collection.Collection {
     static get tagName() {
@@ -41882,7 +41943,7 @@ var log = __nccwpck_require__(7249);
 var merge = __nccwpck_require__(452);
 var stringify = __nccwpck_require__(2148);
 var identity = __nccwpck_require__(1127);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 
 function addPairToJSMap(ctx, map, { key, value }) {
     if (identity.isNode(key) && key.addToJSMap)
@@ -42006,7 +42067,7 @@ exports.isSeq = isSeq;
 
 /***/ }),
 
-/***/ 6424:
+/***/ 4043:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -44868,9 +44929,9 @@ var binary = __nccwpck_require__(6083);
 var merge = __nccwpck_require__(452);
 var omap = __nccwpck_require__(303);
 var pairs = __nccwpck_require__(8385);
-var schema$2 = __nccwpck_require__(8294);
+var schema$2 = __nccwpck_require__(5913);
 var set = __nccwpck_require__(1528);
-var timestamp = __nccwpck_require__(4371);
+var timestamp = __nccwpck_require__(6752);
 
 const schemas = new Map([
     ['core', schema.schema],
@@ -45299,7 +45360,7 @@ exports.merge = merge;
 
 
 var identity = __nccwpck_require__(1127);
-var toJS = __nccwpck_require__(6424);
+var toJS = __nccwpck_require__(4043);
 var YAMLMap = __nccwpck_require__(4454);
 var YAMLSeq = __nccwpck_require__(2223);
 var pairs = __nccwpck_require__(8385);
@@ -45467,7 +45528,7 @@ exports.resolvePairs = resolvePairs;
 
 /***/ }),
 
-/***/ 8294:
+/***/ 5913:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -45485,7 +45546,7 @@ var merge = __nccwpck_require__(452);
 var omap = __nccwpck_require__(303);
 var pairs = __nccwpck_require__(8385);
 var set = __nccwpck_require__(1528);
-var timestamp = __nccwpck_require__(4371);
+var timestamp = __nccwpck_require__(6752);
 
 const schema = [
     map.map,
@@ -45620,7 +45681,7 @@ exports.set = set;
 
 /***/ }),
 
-/***/ 4371:
+/***/ 6752:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -47233,13 +47294,35 @@ module.exports = /*#__PURE__*/JSON.parse('{"$schema":"http://json-schema.org/dra
 /******/ 	if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = __dirname + "/";
 /******/ 	
 /************************************************************************/
-/******/ 	
-/******/ 	// startup
-/******/ 	// Load entry module and return exports
-/******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(9407);
-/******/ 	module.exports = __webpack_exports__;
-/******/ 	
+var __webpack_exports__ = {};
+// This entry need to be wrapped in an IIFE because it need to be in strict mode.
+(() => {
+"use strict";
+var exports = __webpack_exports__;
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const types_1 = __nccwpck_require__(8522);
+const runner_1 = __nccwpck_require__(7965);
+async function main() {
+    try {
+        await (0, runner_1.runGitLabAssessment)();
+    }
+    catch (error) {
+        if (error instanceof types_1.Control9ActionError) {
+            console.error(error.message);
+            process.exitCode = 1;
+            return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Control9 GitLab runner failed unexpectedly: ${message}`);
+        process.exitCode = 1;
+    }
+}
+void main();
+
+})();
+
+module.exports = __webpack_exports__;
 /******/ })()
 ;
 //# sourceMappingURL=index.js.map

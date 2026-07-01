@@ -1,5 +1,6 @@
 export { buildSignedActionEnvelope } from "./build";
 export { readGitHubWorkflowContext } from "./github-context";
+export { readGitLabWorkflowContext } from "./gitlab-context";
 export { fingerprintPayload, fingerprintSigningKeyMaterial } from "./fingerprint";
 export { redactPayload, containsRawSecretMarkers } from "./redact";
 export { canonicalizeJson, sortKeys } from "./serialize";
@@ -10,6 +11,10 @@ export {
   ENVELOPE_SCHEMA_VERSION,
   type ActionEnvelope,
   type GitHubWorkflowContext,
+  type GitLabProviderContext,
+  type GitHubProviderContext,
+  type ProviderContext,
+  type WorkflowContext,
   type NormalizedChangeSummary,
   type PolicyDecision,
   type RawPolicyDecisionResponse,

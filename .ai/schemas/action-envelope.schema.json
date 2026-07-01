@@ -45,7 +45,7 @@
       "properties": {
         "provider": {
           "type": "string",
-          "const": "github"
+          "enum": ["github", "gitlab"]
         },
         "eventName": {
           "type": "string"
