@@ -22,7 +22,7 @@ When `command` is not `deploy-verification`, the client calls the policy evaluat
 - **Request body:** signed `control9.action-envelope.v0` JSON.
 - **Request headers:** `Content-Type: application/json`, `Accept: application/json`. The lower-level clients may attach `Authorization: Bearer <token>` when a programmatic caller supplies an API token, but the MVP GitHub Action and GitLab component expose no customer-facing Bearer token input.
 - **Normalized decision kinds:** `allow`, `deny`, `require_approval`, `observe`. SaaS may return `pending`; client handling depends on runtime mode (below).
-- **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Snake_case aliases (`decision_id`, `decision_kind`, etc.) are accepted.
+- **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Accepted snake_case aliases for fixture compatibility: `decision_id`, `decision_kind`, `correlation_id`, `runtime_mode`, `may_continue`, `required_action`, `follow_up`, `risk_summary`, and `policy_version`. `reason` is unchanged.
 - **Retries:** bounded backoff on `408`, `429`, `500`, `502`, `503`, `504`. Malformed HTTP 200 responses fail the job in all modes.
 
 ### Pending handling
@@ -34,7 +34,7 @@ When SaaS returns `decisionKind: pending`:
 
 ### Deploy verification
 
-When `command` is `deploy-verification`, the client calls `POST {apiBaseUrl}/v1/deploy-verifications` with the same signed envelope. See `.ai/integration/api_contracts.md` for normalized verification statuses and workflow placement. MVP expects synchronous terminal verification statuses only.
+When `command` is `deploy-verification`, the client calls `POST {apiBaseUrl}/v1/deploy-verifications` with the same signed envelope. Callers do not pass a separate approval id. See `.ai/integration/api_contracts.md` for normalized verification statuses and workflow placement. MVP expects synchronous terminal verification statuses only (`verified`, `fingerprint_mismatch`, `no_approved_baseline`); SaaS does not return `pending` on this endpoint.
 
 The integration does not evaluate full policy packs locally and is not the durable system of record. Malformed configuration, invalid signatures, unsupported artifacts, and schema validation failures return actionable local errors. Transient network or server failures may retry with bounded backoff inside the CI job timeout.
 
