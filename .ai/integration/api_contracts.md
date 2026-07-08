@@ -17,7 +17,7 @@ When the `command` input is not `deploy-verification`, the client calls the poli
 
 - **Endpoint:** `POST {apiBaseUrl}/v1/action-envelopes` (trailing slash on base URL stripped before join).
 - **Request body:** the signed action envelope (`control9.action-envelope.v0`) built from the current artifact and provider workflow context.
-- **Request headers:** `Content-Type: application/json`, `Accept: application/json`, optional `Authorization: Bearer` when configured.
+- **Request headers:** `Content-Type: application/json`, `Accept: application/json`. Lower-level clients may attach `Authorization: Bearer <token>` when `apiToken` is supplied by a programmatic caller, but MVP provider configuration does not expose a customer-facing Bearer token input.
 - **Normalized decision kinds:** `allow`, `deny`, `require_approval`, `observe`. When SaaS returns `pending`, shadow mode normalizes to effective observe and continues; enforce mode fails the job.
 - **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Snake_case aliases accepted.
 - **Retries:** same bounded retry policy and retryable HTTP status set as deploy verification (`408`, `429`, `500`, `502`, `503`, `504`). Malformed HTTP 200 responses fail the job in all modes.
