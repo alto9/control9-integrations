@@ -5,12 +5,12 @@ This doc describes how the domain responds when a product-level state cannot con
 ## Contract
 
 - The integration is a customer-edge enforcement and reporting point, not the durable system of record.
-- It gathers supported IaC and deploy context, redacts locally, signs an envelope, requests a SaaS decision, and renders the result where developers already work.
+- It gathers supported IaC and deploy context, redacts locally, signs an envelope with the required customer-supplied `signing-secret`, requests a SaaS decision, and renders the result where developers already work.
 - Policy outcomes are classified into a small deterministic set before workflow feedback is published. The action never guesses a decision kind when the policy API response is incomplete or untrustworthy.
 
 ## Policy decision outcomes
 
-After a successful envelope submission, SaaS `pending` is handled before the terminal policy decision table: shadow mode projects it to effective `observe`, preserves the SaaS `correlationId` in summary/output data, and continues; enforce mode fails closed immediately with no approval wait or in-job polling.
+After a successful envelope submission to `POST {apiBaseUrl}/v1/action-envelopes`, SaaS `pending` is handled before the terminal policy decision table: shadow mode projects it to effective `observe`, preserves the SaaS `correlationId` in summary/output data, and continues; enforce mode fails closed immediately after workflow feedback is published with no approval wait or in-job polling.
 
 After response normalization, the action handles four terminal policy kinds:
 
@@ -23,7 +23,7 @@ After response normalization, the action handles four terminal policy kinds:
 
 ## Policy API failure outcomes
 
-When the policy client cannot produce a normalized decision, blocking follows the fail-open path vs protected enforce target matrix in the next section. Shadow mode is always a fail-open path. Enforce mode on a listed `fail-open-environments` target behaves like shadow for API unavailability only.
+When the policy client cannot produce a normalized decision after an API response or transport failure, blocking follows the fail-open path vs protected enforce target matrix in the next section. Shadow mode is always a fail-open path. Enforce mode on a listed `fail-open-environments` target behaves like shadow for API unavailability only.
 
 ## Fail-open paths and protected enforce targets
 
@@ -38,7 +38,7 @@ When the policy or deploy verification client cannot produce a normalized outcom
 
 | Condition | Retries | Rendered outcome | Fail-open path | Protected enforce target |
 |-----------|---------|------------------|----------------|--------------------------|
-| Transient network or retryable HTTP status (`408`, `429`, `500`, `502`, `503`, `504`) | Bounded with exponential backoff | `unavailable_api` after exhaustion | Job continues | Job fails |
+| Transient network failure or retryable HTTP status (`408`, `429`, `500`, `502`, `503`, `504`) | Bounded with exponential backoff inside the CI job timeout | `unavailable_api` after exhaustion | Job continues | Job fails |
 | Request timeout before a response is received | Same retry policy when detectable; otherwise classify as `unavailable_api` | `unavailable_api` or `timeout` | Job continues | Job fails |
 | HTTP 200 with missing or invalid decision or verification fields | None | `malformed_response` | Job fails | Job fails |
 | Non-retryable HTTP status (for example `400`, `401`, `403`, `404`) | None | `unavailable_api` with status detail | Job continues | Job fails |
@@ -47,18 +47,18 @@ Fail-open configuration does not relax enforce-mode blocking for normalized poli
 
 ## Local pre-submit failures
 
-These occur before envelope submission and remain immediate action errors without outcome rendering:
+These occur before envelope submission and remain immediate action errors without policy or deploy-verification outcome rendering:
 
-- Unsupported command or artifact shape for the selected IaC tool.
-- Unreadable artifact paths.
-- Envelope schema, signing, or redaction failures.
-- Invalid action inputs.
+- Unsupported command or artifact shape for the selected IaC tool, including unsupported Terraform/OpenTofu, CDK, or CloudFormation artifacts.
+- Unreadable artifact paths or working directories.
+- Envelope schema, signing, or redaction failures, including missing or unusable `signing-secret` material copied from the customer onboarding flow into CI secrets or variables.
+- Invalid action inputs, including malformed `control9-api-url`, missing `tenant-id`, unsupported `mode`, unsupported `command`, or invalid `fail-open-environments` entries.
 
 Unsupported repository configuration that prevents trustworthy evidence collection is a local action error with an actionable message. It is not retried against the policy API.
 
 ## Deploy verification outcomes
 
-When `command` is `deploy-verification`, outcomes come from the verification API rather than policy decision kinds:
+When `command` is `deploy-verification`, outcomes come from `POST {apiBaseUrl}/v1/deploy-verifications` rather than policy decision kinds:
 
 | Verification status | Shadow mode | Enforce mode |
 |---------------------|-------------|--------------|
