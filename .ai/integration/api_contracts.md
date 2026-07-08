@@ -1,6 +1,6 @@
 # API Contracts
 
-This doc describes service boundaries and request or response responsibilities without exact endpoint names.
+This doc describes Control9 policy and deploy-verification client boundaries, canonical HTTP routes, request and response normalization, and workflow placement. The authoritative SaaS wire contract is `control9/.ai/specs/ci-envelope-ingestion.spec.md`.
 
 ## Contract
 
@@ -19,7 +19,7 @@ When the `command` input is not `deploy-verification`, the client calls the poli
 - **Request body:** the signed action envelope (`control9.action-envelope.v0`) built from the current artifact and provider workflow context.
 - **Request headers:** `Content-Type: application/json`, `Accept: application/json`. Lower-level clients may attach `Authorization: Bearer <token>` when `apiToken` is supplied by a programmatic caller, but MVP provider configuration does not expose a customer-facing Bearer token input.
 - **Normalized decision kinds:** `allow`, `deny`, `require_approval`, `observe`. When SaaS returns `pending`, shadow mode normalizes to effective observe and continues; enforce mode fails the job.
-- **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Snake_case aliases accepted.
+- **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Accepted snake_case aliases for fixture compatibility: `decision_id`, `decision_kind`, `correlation_id`, `runtime_mode`, `may_continue`, `required_action`, `follow_up`, `risk_summary`, and `policy_version`. `reason` is unchanged.
 - **Retries:** same bounded retry policy and retryable HTTP status set as deploy verification (`408`, `429`, `500`, `502`, `503`, `504`). Malformed HTTP 200 responses fail the job in all modes.
 - **Client testing:** treat the API as remote and mockable with fixture JSON; no live Control9 dependency in unit or integration tests.
 
@@ -31,11 +31,11 @@ When the GitHub Action `command` input is `deploy-verification`, the client call
 
 - **Endpoint:** `POST {apiBaseUrl}/v1/deploy-verifications` (trailing slash on base URL stripped before join).
 - **Request body:** the signed action envelope (`control9.action-envelope.v0`) built from the current artifact. The envelope carries tenant, repository, ref or pull request, environment, requested authority, artifact fingerprints, and correlation identity. The control plane resolves the approved fingerprint from that context; callers do not pass a separate approval id input in this milestone.
-- **Normalized verification statuses:**
+- **Normalized verification statuses** (MVP synchronous terminal only; SaaS does not return `pending` on this endpoint):
   - `verified` — current artifact fingerprint matches the approved fingerprint on record.
   - `fingerprint_mismatch` — a baseline exists but the current fingerprint differs; response includes `expectedFingerprint` and `actualFingerprint`.
   - `no_approved_baseline` — no approved fingerprint exists for this governed change context; response includes human-readable `reason` text.
-- **Response fields** (when present): `verificationId`, optional linked `decisionId`, `expectedFingerprint`, `actualFingerprint`, and `reason`.
+- **Response fields** (when present): `verificationId`, `verificationStatus`, optional linked `decisionId`, `expectedFingerprint`, `actualFingerprint`, and `reason`. Accepted snake_case aliases for fixture compatibility: `verification_id`, `verification_status`, `expected_fingerprint`, `actual_fingerprint`, and `decision_id`. `reason` is unchanged.
 - **Retries:** same bounded retry policy and retryable HTTP status set as policy envelope submission (`408`, `429`, `500`, `502`, `503`, `504`). Malformed HTTP 200 responses fail the job in all modes.
 - **Client testing:** treat the API as remote and mockable with fixture JSON; no live Control9 dependency in unit or integration tests.
 

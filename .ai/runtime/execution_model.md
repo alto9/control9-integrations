@@ -29,4 +29,4 @@ Verification API transport failures follow the same retry and fail-open vs prote
 
 ## Future scope
 
-Explicit long-lived approval waits, polling behavior, and stale approval handling belong to future approval workflow work. SaaS `pending` policy responses are not approval waits in the MVP CI client.
+None for CI ingestion HTTP contract alignment. Future enforce-mode approval wait, in-job polling, and stale approval handling for explicit approval workflows remain out of scope for the MVP integrations milestone. SaaS `pending` policy responses are not approval waits in MVP; enforce mode fails closed on the first `require_approval` or `pending` response without polling inside the job.
