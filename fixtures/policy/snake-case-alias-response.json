@@ -1,0 +1,14 @@
+{
+  "decision_id": "dec-alias-1",
+  "decision_kind": "require_approval",
+  "reason": "Production change requires approval.",
+  "correlation_id": "corr-alias-001",
+  "runtime_mode": "enforce",
+  "may_continue": false,
+  "required_action": "approval",
+  "risk_summary": "Creates public resources.",
+  "policy_version": "2026.06.2",
+  "follow_up": {
+    "approval_url": "https://control9.example/approve/dec-alias-1"
+  }
+}

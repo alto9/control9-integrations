@@ -1,0 +1,8 @@
+{
+  "verification_id": "verify-alias-001",
+  "verification_status": "fingerprint_mismatch",
+  "decision_id": "dec-approved-003",
+  "expected_fingerprint": "fp-baseline-approved",
+  "actual_fingerprint": "fp-current-artifact",
+  "reason": "Artifact fingerprint does not match the approved baseline."
+}

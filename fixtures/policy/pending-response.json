@@ -1,0 +1,8 @@
+{
+  "decisionId": "dec-pending-1",
+  "decisionKind": "pending",
+  "reason": "Policy evaluation is still in progress.",
+  "correlationId": "corr-pending-001",
+  "runtimeMode": "shadow",
+  "mayContinue": true
+}
