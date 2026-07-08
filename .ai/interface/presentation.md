@@ -58,8 +58,8 @@ When the GitLab presentation path is not yet wired, jobs still emit:
 
 ## Open implementation decisions
 
-Implementation-level items not yet fully specified. `/refine-issue` resolves these into timeless contract prose and removes or collapses bullets when done.
+No open presentation decisions for MVP `pending` handling or runtime mode vocabulary. SaaS `pending` responses render as effective `observe` in shadow mode and as immediate fail-closed feedback in enforce mode; they do not render a client-side wait state.
 
 ### Control9 project plan
 
-- Define future enforce-mode approval wait, polling behavior, and stale approval handling for explicit approval workflows (`runtime/execution_model.md`, `integration/messaging_async.md`). SaaS `pending` responses do not render as a client-side wait state in the MVP.
+- Define future enforce-mode approval wait, polling behavior, and stale approval handling for explicit approval workflows (`runtime/execution_model.md`, `integration/messaging_async.md`).
