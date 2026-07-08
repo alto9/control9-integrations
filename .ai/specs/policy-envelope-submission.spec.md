@@ -54,6 +54,10 @@ Envelope construction is remote-client oriented and mockable. Redaction happens 
 
 Testing should cover parsing supported IaC artifacts, normalizing action envelope content, redacting secrets, computing stable fingerprints, signing envelopes, mapping policy decisions (including `pending` in shadow mode and enforce-mode fail-closed handling), deploy verification normalization, and rendering workflow, PR, or merge request feedback. Fixture coverage should include terminal decisions, `pending` policy responses, malformed input, unsupported artifact versions, secrets requiring redaction, and verification outcomes.
 
+HTTP contract fixtures for client response parsing live in reusable JSON files under `fixtures/policy/` and `fixtures/verification/`, then drive Vitest coverage for `src/policy/client.ts` and `src/verification/client.ts`. Policy fixtures cover flat SaaS policy responses for `allow`, `deny`, `require_approval`, `observe`, and `pending`, malformed HTTP 200 payloads, retry exhaustion or retryable HTTP status cases, and accepted top-level snake_case aliases for documented response fields. Deploy verification fixtures cover `verified`, `fingerprint_mismatch`, `no_approved_baseline`, malformed HTTP 200 payloads, retry exhaustion or retryable HTTP status cases, and accepted top-level snake_case aliases for documented verification response fields.
+
+Fixture JSON mirrors the flat CI-facing HTTP shapes from the peer `control9/.ai/specs/ci-envelope-ingestion.spec.md` contract. Fixtures must not include internal SaaS wrapper or persistence fields such as `ok`, `accepted`, `isReplay`, `enqueuedClassification`, `data`, `skeleton`, `outcome`, `approvedFingerprint`, or `failureReasonCode`. Local client tests remain mock-backed with no live Control9 dependency; later deployed-stage validation may reuse the same fixture vectors after the canonical SaaS routes and flat response projection are deployed.
+
 Local verification uses `npm run test`, `npm run lint`, `npm run typecheck`, and `npm run build`. CI checks verify the generated `dist/` bundle matches source changes.
 
 ## References
