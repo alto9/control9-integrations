@@ -21,6 +21,7 @@ This doc describes configuration classes and safe defaults for the GitHub Action
 - Control9 API base URL (required): absolute `http` or `https` URL, trailing slash stripped at parse time.
 - Tenant or installation identity (required): stable tenant key supplied by Control9 onboarding.
 - Signing secret (required, secret input): HMAC signing material for envelope submission. Never logged or echoed.
+- No separate Control9 API Bearer token input is exposed in the MVP GitHub Action or GitLab component. Public ingestion authentication relies on signed envelopes; lower-level client adapters may attach a Bearer token only when a programmatic caller supplies one outside the provider input surface.
 
 ### Fail-open environment overrides
 

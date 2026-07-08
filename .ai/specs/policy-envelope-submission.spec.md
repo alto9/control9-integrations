@@ -20,7 +20,7 @@ When `command` is not `deploy-verification`, the client calls the policy evaluat
 
 - **Endpoint:** `POST {apiBaseUrl}/v1/action-envelopes` (trailing slash on base URL stripped before join).
 - **Request body:** signed `control9.action-envelope.v0` JSON.
-- **Request headers:** `Content-Type: application/json`, `Accept: application/json`, optional `Authorization: Bearer` when an API token is configured.
+- **Request headers:** `Content-Type: application/json`, `Accept: application/json`. The lower-level clients may attach `Authorization: Bearer <token>` when a programmatic caller supplies an API token, but the MVP GitHub Action and GitLab component expose no customer-facing Bearer token input.
 - **Normalized decision kinds:** `allow`, `deny`, `require_approval`, `observe`. SaaS may return `pending`; client handling depends on runtime mode (below).
 - **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Snake_case aliases (`decision_id`, `decision_kind`, etc.) are accepted.
 - **Retries:** bounded backoff on `408`, `429`, `500`, `502`, `503`, `504`. Malformed HTTP 200 responses fail the job in all modes.
@@ -44,11 +44,15 @@ The package is a Node-based GitHub Action with `runs.using: node20` and a GitLab
 
 Policy client (`src/policy/client.ts`) and verification client (`src/verification/client.ts`) implement the canonical routes above. `keyId` is derived as SHA-256(signing secret).slice(0, 16) per `.ai/data/serialization.md`.
 
+Policy decision normalization accepts SaaS `pending` responses from policy submission. Runtime handling projects `pending` to effective `observe` in shadow mode and fails closed in enforce mode without in-job polling.
+
+Customer-facing configuration uses `signing-secret` as the required HMAC signing material. MVP does not expose a GitHub Action input, GitLab component input, or `INPUT_*` environment mapping for a separate Control9 API Bearer token; any Bearer header is limited to lower-level client adapters that explicitly provide `apiToken`.
+
 Envelope construction is remote-client oriented and mockable. Redaction happens before signing and submission. Secrets are supplied through CI masked variables, never persisted in generated artifacts.
 
 ## Testing Strategy
 
-Testing should cover parsing supported IaC artifacts, normalizing action envelope content, redacting secrets, computing stable fingerprints, signing envelopes, mapping policy decisions (including `pending` in shadow mode), deploy verification normalization, and rendering workflow, PR, or merge request feedback. Fixture coverage should include terminal decisions, `pending` policy responses, malformed input, unsupported artifact versions, secrets requiring redaction, and verification outcomes.
+Testing should cover parsing supported IaC artifacts, normalizing action envelope content, redacting secrets, computing stable fingerprints, signing envelopes, mapping policy decisions (including `pending` in shadow mode and enforce-mode fail-closed handling), deploy verification normalization, and rendering workflow, PR, or merge request feedback. Fixture coverage should include terminal decisions, `pending` policy responses, malformed input, unsupported artifact versions, secrets requiring redaction, and verification outcomes.
 
 Local verification uses `npm run test`, `npm run lint`, `npm run typecheck`, and `npm run build`. CI checks verify the generated `dist/` bundle matches source changes.
 
@@ -63,10 +67,4 @@ Local verification uses `npm run test`, `npm run lint`, `npm run typecheck`, and
 
 ## Open implementation decisions
 
-Implementation-level items not yet fully specified. `/refine-issue` resolves these into timeless contract prose and removes or collapses bullets when done.
-
-### Client normalization
-- Update `normalizePolicyDecision` to accept SaaS `pending` and project shadow-mode observe semantics per execution model.
-
-### Configuration
-- Document optional Bearer token input name and env mapping for GitHub and GitLab if defense-in-depth token is exposed to customers in MVP.
+None for policy envelope submission contract alignment.
