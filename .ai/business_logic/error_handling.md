@@ -19,7 +19,7 @@ After response normalization, the action handles four terminal policy kinds:
 | `allow` | Job continues; summary and annotations report approval. | Job continues. |
 | `observe` | Job continues; advisory summary states the finding is non-blocking. | Job continues; advisory summary states the finding is non-blocking. |
 | `deny` | Job continues; summary states shadow mode and that Control9 did not block the workflow. | Job fails; workflow is blocked. |
-| `require_approval` | Job continues; summary states shadow mode and that the workflow is not waiting for approval. | Job fails immediately; workflow is blocked and follow-up guidance (for example an approval URL) is rendered when the API supplies it. Approval polling and wait loops are handled separately in async/messaging contracts. |
+| `require_approval` | Job continues; summary states shadow mode and that the workflow is not waiting for approval. | Job fails immediately; workflow is blocked and follow-up guidance (for example an approval URL) is rendered when the API supplies it. The MVP CI client does not poll for approval or wait inside the job; long-lived approval waits belong to future approval workflow work. |
 
 ## Policy API failure outcomes
 

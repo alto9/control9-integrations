@@ -6,7 +6,7 @@ This doc describes asynchronous delivery, replay, notification, retry, and webho
 
 - GitHub Actions is the first fully contracted provider; GitLab CI follows as the next expansion.
 - The integration calls Control9 policy and deploy-verification APIs rather than evaluating full policy packs locally.
-- SaaS `pending` policy responses are synchronous policy API states for the MVP CI client, not asynchronous wait states. Shadow mode records the SaaS `correlationId` in summary/output data and continues; enforce mode fails closed without polling.
+- SaaS `pending` policy responses are synchronous policy API states for the MVP CI client, not asynchronous wait states or terminal client decision kinds. Shadow mode records the SaaS `correlationId` in summary/output data, renders effective `observe` feedback, and continues; enforce mode publishes workflow feedback and fails closed on the first response without in-job polling or approval waiting.
 
 ## Future scope
 
