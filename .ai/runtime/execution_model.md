@@ -32,4 +32,4 @@ Verification API transport failures follow the same retry and fail-open vs prote
 Implementation-level items not yet fully specified. `/refine-issue` resolves these into timeless contract prose and removes or collapses bullets when done.
 
 ### Control9 project plan
-- Define enforce-mode approval wait, polling behavior, and stale approval handling.
+- Define future enforce-mode approval wait, polling behavior, and stale approval handling for explicit approval workflows. SaaS `pending` policy responses are not approval waits in the MVP; they fail closed on the first response in enforce mode.

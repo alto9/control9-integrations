@@ -10,7 +10,9 @@ This doc describes how the domain responds when a product-level state cannot con
 
 ## Policy decision outcomes
 
-After a successful envelope submission and response normalization, the action handles four policy kinds:
+After a successful envelope submission, SaaS `pending` is handled before the terminal policy decision table: shadow mode projects it to effective `observe`, preserves the SaaS `correlationId` in summary/output data, and continues; enforce mode fails closed immediately with no approval wait or in-job polling.
+
+After response normalization, the action handles four terminal policy kinds:
 
 | Decision kind | Shadow mode | Enforce mode |
 |---------------|-------------|--------------|
