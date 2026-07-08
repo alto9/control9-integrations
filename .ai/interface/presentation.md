@@ -56,9 +56,9 @@ When the GitLab presentation path is not yet wired, jobs still emit:
 - **Summary artifact:** Local summary JSON at the path in `runtime/configuration.md`.
 - **Blocking:** Non-zero job exit when `blocksWorkflow` is true.
 
-## Open implementation decisions
+## MVP pending handling and mode vocabulary
 
-No open presentation decisions for MVP `pending` handling or runtime mode vocabulary. SaaS `pending` responses render as effective `observe` in shadow mode and as immediate fail-closed feedback in enforce mode; they do not render a client-side wait state.
+SaaS `pending` policy responses are resolved for the MVP CI client. Shadow mode renders them as effective `observe` and does not block the job. Enforce mode renders immediate fail-closed feedback and does not render a client-side wait state, poll for approval, or wait inside the job. GitHub and GitLab presentation surfaces differ by provider, but pass/fail blocking semantics stay shared with `business_logic/error_handling.md`.
 
 ### Control9 project plan
 
