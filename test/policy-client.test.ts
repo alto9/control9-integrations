@@ -156,4 +156,52 @@ describe("Control9PolicyClient", () => {
       }),
     ).rejects.toThrow(PolicySubmissionError);
   });
+
+  it("accepts pending responses without retrying", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        decision_id: "dec-pending-1",
+        decision_kind: "pending",
+        reason: "Policy evaluation is still in progress.",
+        correlation_id: "corr-saas-123",
+      }),
+    );
+    const client = new Control9PolicyClient({
+      apiBaseUrl: "https://api.control9.example",
+      fetchImpl,
+    });
+
+    const decision = await client.submitEnvelope({
+      envelope: {
+        envelopeId: "a".repeat(64),
+      } as never,
+    });
+
+    expect(decision.decisionKind).toBe("pending");
+    expect(decision.correlationId).toBe("corr-saas-123");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("strips trailing slash from api base URL before submission", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        decision_id: "dec-1",
+        decision_kind: "allow",
+        reason: "Allowed.",
+      }),
+    );
+    const client = new Control9PolicyClient({
+      apiBaseUrl: "https://api.control9.example/",
+      fetchImpl,
+    });
+
+    await client.submitEnvelope({
+      envelope: {
+        envelopeId: "a".repeat(64),
+      } as never,
+    });
+
+    const firstCall = fetchImpl.mock.calls[0];
+    expect(firstCall?.[0]).toBe("https://api.control9.example/v1/action-envelopes");
+  });
 });

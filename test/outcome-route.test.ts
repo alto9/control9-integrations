@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { PolicyDecision, RedactionReport } from "../src/envelope/types";
+import type { RedactionReport } from "../src/envelope/types";
+import type { ParsedPolicyDecision } from "../src/policy/normalize";
 import { routePolicySubmissionOutcome } from "../src/outcomes/route";
 
 const redactionReport: RedactionReport = {
@@ -16,7 +17,7 @@ const baseRouteOptions = {
   failOpenEnvironments: [] as string[],
 };
 
-const baseDecision: PolicyDecision = {
+const baseDecision: ParsedPolicyDecision = {
   decisionId: "dec-allow-1",
   decisionKind: "allow",
   reason: "Allowed by policy.",
@@ -135,6 +136,51 @@ describe("routePolicySubmissionOutcome", () => {
     });
 
     expect(routed.blocksWorkflow).toBe(true);
+  });
+
+  it("projects pending to observe in shadow mode without blocking", () => {
+    const routed = routePolicySubmissionOutcome({
+      submission: {
+        status: "success",
+        decision: {
+          decisionId: "dec-pending-1",
+          decisionKind: "pending",
+          reason: "Policy evaluation is still in progress.",
+          correlationId: "corr-saas-123",
+        },
+      },
+      ...baseRouteOptions,
+      runtimeMode: "shadow",
+    });
+
+    expect(routed.renderInput.kind).toBe("policy_decision");
+    if (routed.renderInput.kind === "policy_decision") {
+      expect(routed.renderInput.decision.decisionKind).toBe("observe");
+    }
+    expect(routed.decisionKindOutput).toBe("observe");
+    expect(routed.correlationId).toBe("corr-saas-123");
+    expect(routed.blocksWorkflow).toBe(false);
+  });
+
+  it("fails closed on pending in enforce mode", () => {
+    const routed = routePolicySubmissionOutcome({
+      submission: {
+        status: "success",
+        decision: {
+          decisionId: "dec-pending-1",
+          decisionKind: "pending",
+          reason: "Policy evaluation is still in progress.",
+          correlationId: "corr-saas-123",
+        },
+      },
+      ...baseRouteOptions,
+      targetEnvironment: "production",
+      runtimeMode: "enforce",
+    });
+
+    expect(routed.decisionKindOutput).toBe("deny");
+    expect(routed.blocksWorkflow).toBe(true);
+    expect(routed.correlationId).toBe("corr-saas-123");
   });
 
   it.each([

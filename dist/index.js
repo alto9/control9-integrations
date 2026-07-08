@@ -33263,9 +33263,18 @@ async function runPolicyFlow(options) {
         runtimeMode: inputs.mode,
         failOpenEnvironments: inputs.failOpenEnvironments,
     });
-    const summary = submission.status === "success"
-        ? (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.decision)
-        : (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
+    let summary;
+    if (submission.status === "success" && routedOutcome.renderInput.kind === "policy_decision") {
+        summary = (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, routedOutcome.renderInput.decision, {
+            correlationId: routedOutcome.correlationId ?? envelope.correlationId,
+        });
+    }
+    else if (submission.status === "failure") {
+        summary = (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
+    }
+    else {
+        throw new types_1.Control9ActionError("Unexpected policy submission outcome.");
+    }
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
     const result = (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
         decisionKind: routedOutcome.decisionKindOutput,
@@ -33477,6 +33486,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.routeVerificationSubmissionOutcome = routeVerificationSubmissionOutcome;
 exports.routePolicySubmissionOutcome = routePolicySubmissionOutcome;
 const resolve_blocking_1 = __nccwpck_require__(4199);
+const normalize_1 = __nccwpck_require__(2425);
 const decision_renderer_1 = __nccwpck_require__(1206);
 function resolveVerificationBlocking(verificationStatus, runtimeMode) {
     if (verificationStatus === "verified") {
@@ -33575,9 +33585,10 @@ function buildVerificationRenderInput(options) {
 function routePolicySubmissionOutcome(options) {
     const { submission, artifactFingerprint, targetEnvironment, redactionReport, runtimeMode, failOpenEnvironments, } = options;
     if (submission.status === "success") {
+        const projected = (0, normalize_1.projectPolicyDecisionForRuntime)(submission.decision, runtimeMode);
         const renderInput = {
             kind: "policy_decision",
-            decision: submission.decision,
+            decision: projected.decision,
             artifactFingerprint,
             targetEnvironment,
             redactionReport,
@@ -33588,8 +33599,9 @@ function routePolicySubmissionOutcome(options) {
             renderInput,
             rendered,
             blocksWorkflow: rendered.blocksWorkflow,
-            decisionKindOutput: submission.decision.decisionKind,
-            summaryMessage: submission.decision.reason,
+            decisionKindOutput: projected.decisionKindOutput,
+            summaryMessage: projected.decision.reason,
+            correlationId: projected.correlationId,
         };
     }
     const renderInput = submission.failureKind === "malformed_response"
@@ -33646,7 +33658,7 @@ exports.writeSummaryFile = writeSummaryFile;
 exports.buildActionResult = buildActionResult;
 const node_fs_1 = __nccwpck_require__(3024);
 const node_path_1 = __importDefault(__nccwpck_require__(6760));
-function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, decision) {
+function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, decision, options) {
     return {
         mode: inputs.mode,
         tenantId: inputs.tenantId,
@@ -33658,7 +33670,7 @@ function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, d
         artifactPaths: routed.artifactPaths,
         redactionProfile: inputs.redactionProfile ?? "standard",
         envelopeId: envelope.envelopeId,
-        correlationId: envelope.correlationId,
+        correlationId: options?.correlationId ?? envelope.correlationId,
         decisionId: decision.decisionId,
         decisionKind: decision.decisionKind,
         decisionReason: decision.reason,
@@ -34040,7 +34052,7 @@ class Control9PolicyClient {
                 }
                 try {
                     const payload = (await response.json());
-                    const decision = (0, normalize_1.normalizePolicyDecision)(payload);
+                    const decision = (0, normalize_1.normalizePolicyDecisionResponse)(payload);
                     return { status: "success", decision };
                 }
                 catch (error) {
@@ -34088,13 +34100,19 @@ function createPolicyClient(options) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizePolicyDecisionResponse = normalizePolicyDecisionResponse;
+exports.projectPolicyDecisionForRuntime = projectPolicyDecisionForRuntime;
 exports.normalizePolicyDecision = normalizePolicyDecision;
 const types_1 = __nccwpck_require__(8522);
-const ALLOWED_DECISION_KINDS = new Set([
+const TERMINAL_DECISION_KINDS = new Set([
     "allow",
     "deny",
     "require_approval",
     "observe",
+]);
+const INCOMING_DECISION_KINDS = new Set([
+    ...TERMINAL_DECISION_KINDS,
+    "pending",
 ]);
 function readStringField(response, camelCase, snakeCase) {
     const camelValue = response[camelCase];
@@ -34107,10 +34125,11 @@ function readStringField(response, camelCase, snakeCase) {
     }
     return undefined;
 }
-function normalizePolicyDecision(response) {
+function normalizePolicyDecisionResponse(response) {
     const decisionId = readStringField(response, "decisionId", "decision_id");
     const decisionKindRaw = readStringField(response, "decisionKind", "decision_kind");
     const reason = readStringField(response, "reason", "reason");
+    const correlationId = readStringField(response, "correlationId", "correlation_id");
     if (!decisionId) {
         throw new types_1.Control9ActionError("Control9 policy response is missing decision id.");
     }
@@ -34118,7 +34137,7 @@ function normalizePolicyDecision(response) {
         throw new types_1.Control9ActionError("Control9 policy response is missing decision kind.");
     }
     const normalizedKind = decisionKindRaw.toLowerCase().replace(/-/g, "_");
-    if (!ALLOWED_DECISION_KINDS.has(normalizedKind)) {
+    if (!INCOMING_DECISION_KINDS.has(normalizedKind)) {
         throw new types_1.Control9ActionError(`Unsupported Control9 decision kind "${decisionKindRaw}".`);
     }
     if (!reason) {
@@ -34131,9 +34150,67 @@ function normalizePolicyDecision(response) {
         decisionId,
         decisionKind: normalizedKind,
         reason,
+        correlationId,
         riskSummary,
         policyVersion,
         followUp,
+    };
+}
+function projectPolicyDecisionForRuntime(parsed, runtimeMode) {
+    if (parsed.decisionKind !== "pending") {
+        return {
+            decision: {
+                decisionId: parsed.decisionId,
+                decisionKind: parsed.decisionKind,
+                reason: parsed.reason,
+                riskSummary: parsed.riskSummary,
+                policyVersion: parsed.policyVersion,
+                followUp: parsed.followUp,
+            },
+            decisionKindOutput: parsed.decisionKind,
+            correlationId: parsed.correlationId,
+        };
+    }
+    if (runtimeMode === "shadow") {
+        return {
+            decision: {
+                decisionId: parsed.decisionId,
+                decisionKind: "observe",
+                reason: parsed.reason,
+                riskSummary: parsed.riskSummary,
+                policyVersion: parsed.policyVersion,
+                followUp: parsed.followUp,
+            },
+            decisionKindOutput: "observe",
+            correlationId: parsed.correlationId,
+        };
+    }
+    return {
+        decision: {
+            decisionId: parsed.decisionId,
+            decisionKind: "deny",
+            reason: parsed.reason,
+            riskSummary: parsed.riskSummary,
+            policyVersion: parsed.policyVersion,
+            followUp: parsed.followUp,
+        },
+        decisionKindOutput: "deny",
+        correlationId: parsed.correlationId,
+    };
+}
+/** @deprecated Use {@link normalizePolicyDecisionResponse} */
+function normalizePolicyDecision(response) {
+    const parsed = normalizePolicyDecisionResponse(response);
+    if (parsed.decisionKind === "pending") {
+        throw new types_1.Control9ActionError(`Unsupported Control9 decision kind "pending".`);
+    }
+    return {
+        decisionId: parsed.decisionId,
+        decisionKind: parsed.decisionKind,
+        reason: parsed.reason,
+        riskSummary: parsed.riskSummary,
+        policyVersion: parsed.policyVersion,
+        followUp: parsed.followUp,
     };
 }
 

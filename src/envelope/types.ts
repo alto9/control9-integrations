@@ -129,6 +129,8 @@ export interface RawPolicyDecisionResponse {
   decision_kind?: string;
   decisionKind?: string;
   reason?: string;
+  correlation_id?: string;
+  correlationId?: string;
   risk_summary?: string;
   riskSummary?: string;
   policy_version?: string;

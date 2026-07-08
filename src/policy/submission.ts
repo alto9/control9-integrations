@@ -1,5 +1,5 @@
-import type { PolicyDecision } from "../envelope/types";
 import { Control9ActionError } from "../types";
+import type { ParsedPolicyDecision } from "./normalize";
 
 export type PolicySubmissionFailureKind =
   | "unavailable_api"
@@ -8,7 +8,7 @@ export type PolicySubmissionFailureKind =
 
 export interface PolicySubmissionSuccess {
   status: "success";
-  decision: PolicyDecision;
+  decision: ParsedPolicyDecision;
 }
 
 export interface PolicySubmissionFailure {
@@ -89,7 +89,7 @@ export function classifySubmissionError(error: unknown): PolicySubmissionFailure
 }
 
 export function toSubmissionResult(
-  value: PolicyDecision | PolicySubmissionFailure,
+  value: ParsedPolicyDecision | PolicySubmissionFailure,
 ): PolicySubmissionResult {
   if ("status" in value && value.status === "failure") {
     return value;
@@ -97,6 +97,6 @@ export function toSubmissionResult(
 
   return {
     status: "success",
-    decision: value as PolicyDecision,
+    decision: value as ParsedPolicyDecision,
   };
 }
