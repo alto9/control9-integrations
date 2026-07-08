@@ -12,6 +12,7 @@ This doc describes how the repo executes its main work at runtime.
 - Unsupported artifacts, invalid configuration, schema failures, signing failures, and redaction failures are local action errors because the action cannot produce trustworthy governance evidence from them.
 - After envelope submission, the action classifies the result into a policy decision kind or a documented API failure outcome (`unavailable_api`, `timeout`, `malformed_response`) before publishing workflow feedback. Blocking behavior follows the matrix in `business_logic/error_handling.md` using the configured `mode`, `target-environment`, and optional `fail-open-environments` list.
 - In enforce mode, `deny` and `require_approval` decisions fail the job immediately after feedback is published. The action does not poll for approval in this milestone; it renders follow-up guidance when the API provides it.
+- When SaaS returns `decisionKind: pending` on policy submission, shadow mode normalizes to effective `observe`, continues the job, and records `correlationId` in summary/outputs. Enforce mode fails the job on the first `pending` response without in-job polling.
 - When `command` is `deploy-verification`, the action builds and signs the envelope, calls the deploy verification API (not the policy decision API), classifies the verification status, publishes deploy-verification workflow feedback, and applies blocking rules below.
 
 ## Deploy verification execution

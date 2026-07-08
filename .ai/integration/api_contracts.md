@@ -9,7 +9,21 @@ This doc describes service boundaries and request or response responsibilities w
 - The first GitHub Action requires a Control9 API base URL, tenant or installation identity, and signing secret or token supplied through GitHub Actions inputs and secrets. Shadow mode is the default first-install mode.
 - The action submits one signed, redacted action envelope per evaluated command or artifact group to the Control9 policy decision boundary. The client treats the API as remote and mockable, with deterministic request construction and fixture coverage.
 - Client retries are bounded and safe for CI: transient network and server failures may retry with backoff inside the job timeout, while malformed configuration, invalid signatures, unsupported artifacts, and schema validation failures return actionable local errors.
-- Policy responses are normalized into `allow`, `deny`, `require_approval`, or `observe` with reason text, optional risk summary, policy version, decision id, and follow-up metadata for later rendering by workflow feedback code.
+- Policy responses are normalized into `allow`, `deny`, `require_approval`, or `observe` with reason text, optional risk summary, policy version, decision id, and follow-up metadata for later rendering by workflow feedback code. SaaS may return `pending`; shadow mode treats it as non-blocking observe with `correlationId` logged; enforce mode fails closed.
+
+## Policy envelope submission API
+
+When the `command` input is not `deploy-verification`, the client calls the policy evaluation boundary.
+
+- **Endpoint:** `POST {apiBaseUrl}/v1/action-envelopes` (trailing slash on base URL stripped before join).
+- **Request body:** the signed action envelope (`control9.action-envelope.v0`) built from the current artifact and provider workflow context.
+- **Request headers:** `Content-Type: application/json`, `Accept: application/json`, optional `Authorization: Bearer` when configured.
+- **Normalized decision kinds:** `allow`, `deny`, `require_approval`, `observe`. When SaaS returns `pending`, shadow mode normalizes to effective observe and continues; enforce mode fails the job.
+- **Response fields** (when present): `decisionId`, `decisionKind`, `reason`, `correlationId`, optional `riskSummary`, `policyVersion`, `followUp`, `mayContinue`, `requiredAction`, `runtimeMode`. Snake_case aliases accepted.
+- **Retries:** same bounded retry policy and retryable HTTP status set as deploy verification (`408`, `429`, `500`, `502`, `503`, `504`). Malformed HTTP 200 responses fail the job in all modes.
+- **Client testing:** treat the API as remote and mockable with fixture JSON; no live Control9 dependency in unit or integration tests.
+
+The authoritative SaaS HTTP contract (auth, errors, idempotency) is `control9/.ai/specs/ci-envelope-ingestion.spec.md`.
 
 ## Deploy verification API
 
