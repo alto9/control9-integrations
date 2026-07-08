@@ -1,5 +1,5 @@
-import type { ActionEnvelope, PolicyDecision } from "../envelope/types";
-import { normalizePolicyDecision } from "./normalize";
+import type { ActionEnvelope } from "../envelope/types";
+import { normalizePolicyDecisionResponse, type ParsedPolicyDecision } from "./normalize";
 import {
   PolicySubmissionError,
   type PolicySubmissionResult,
@@ -47,7 +47,7 @@ export class Control9PolicyClient {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async submitEnvelope(request: SubmitEnvelopeRequest): Promise<PolicyDecision> {
+  async submitEnvelope(request: SubmitEnvelopeRequest): Promise<ParsedPolicyDecision> {
     const result = await this.submitEnvelopeWithOutcome(request);
     if (result.status === "failure") {
       throw new PolicySubmissionError(
@@ -93,7 +93,7 @@ export class Control9PolicyClient {
 
         try {
           const payload = (await response.json()) as Record<string, unknown>;
-          const decision = normalizePolicyDecision(payload);
+          const decision = normalizePolicyDecisionResponse(payload);
           return { status: "success", decision };
         } catch (error) {
           const detail =

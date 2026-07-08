@@ -20,6 +20,7 @@ export function buildValidationSummary(
   artifactFingerprint: string,
   envelope: ActionEnvelope,
   decision: PolicyDecision,
+  options?: { correlationId?: string },
 ): ValidationSummary {
   return {
     mode: inputs.mode,
@@ -32,7 +33,7 @@ export function buildValidationSummary(
     artifactPaths: routed.artifactPaths,
     redactionProfile: inputs.redactionProfile ?? "standard",
     envelopeId: envelope.envelopeId,
-    correlationId: envelope.correlationId,
+    correlationId: options?.correlationId ?? envelope.correlationId,
     decisionId: decision.decisionId,
     decisionKind: decision.decisionKind,
     decisionReason: decision.reason,

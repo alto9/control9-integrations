@@ -33273,11 +33273,13 @@ exports.buildSectionStartMarker = buildSectionStartMarker;
 exports.buildSectionEndMarker = buildSectionEndMarker;
 exports.buildSectionBodyLines = buildSectionBodyLines;
 exports.publishGitLabJobFeedback = publishGitLabJobFeedback;
+exports.publishGitLabPresentationFeedback = publishGitLabPresentationFeedback;
 exports.writeGitLabPresentationOutputs = writeGitLabPresentationOutputs;
 const node_fs_1 = __nccwpck_require__(3024);
 const workflow_summary_1 = __nccwpck_require__(3151);
 Object.defineProperty(exports, "buildLogFallbackLines", ({ enumerable: true, get: function () { return workflow_summary_1.buildLogFallbackLines; } }));
 const log_output_1 = __nccwpck_require__(1995);
+const mr_note_1 = __nccwpck_require__(5085);
 exports.POLICY_SECTION_ID = "control9-policy-decision";
 exports.DEPLOY_VERIFICATION_SECTION_ID = "control9-deploy-verification";
 exports.DISABLE_SECTION_MARKERS_ENV = "CONTROL9_DISABLE_JOB_LOG_SECTIONS";
@@ -33339,6 +33341,15 @@ function publishGitLabJobFeedback(input, deps = {}) {
     }
     return { sectionWritten: true, usedLogFallback: false };
 }
+async function publishGitLabPresentationFeedback(input, deps = {}) {
+    const presentation = input.presentation ?? "policy";
+    const jobFeedback = publishGitLabJobFeedback(input, deps);
+    const mrNote = await (0, mr_note_1.publishMrNote)({ rendered: input.rendered, presentation });
+    return {
+        ...jobFeedback,
+        mrNoteState: mrNote.state,
+    };
+}
 function writeGitLabPresentationOutputs(result) {
     const outputFile = process.env[exports.GITLAB_OUTPUT_ENV]?.trim();
     if (!outputFile) {
@@ -33347,6 +33358,7 @@ function writeGitLabPresentationOutputs(result) {
     (0, node_fs_1.appendFileSync)(outputFile, [
         `CONTROL9_JOB_SECTION_WRITTEN=${String(result.sectionWritten)}`,
         `CONTROL9_USED_LOG_FALLBACK=${String(result.usedLogFallback)}`,
+        `CONTROL9_MR_NOTE_STATE=${result.mrNoteState}`,
     ].join("\n") + "\n", "utf8");
 }
 
@@ -33387,6 +33399,158 @@ function publishBaselineLogFeedback(input) {
         console.log(`Control9 summary JSON: ${input.summaryPath}`);
     }
     return { summaryWritten: false };
+}
+
+
+/***/ }),
+
+/***/ 5085:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GitLabApiError = exports.CONTROL9_MR_MARKER_PREFIX = void 0;
+exports.buildMrNoteMarker = buildMrNoteMarker;
+exports.buildMrNoteBody = buildMrNoteBody;
+exports.readMrNoteContextFromEnv = readMrNoteContextFromEnv;
+exports.createFetchGitLabMrNotesClient = createFetchGitLabMrNotesClient;
+exports.publishMrNote = publishMrNote;
+const workflow_summary_1 = __nccwpck_require__(3151);
+exports.CONTROL9_MR_MARKER_PREFIX = "control9-mr-feedback";
+function readEnv(name) {
+    return process.env[name]?.trim() ?? "";
+}
+function readPositiveInteger(value) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+    return undefined;
+}
+function resolveGitLabToken() {
+    return (readEnv("CONTROL9_GITLAB_TOKEN") ||
+        readEnv("GITLAB_TOKEN") ||
+        readEnv("CI_JOB_TOKEN"));
+}
+function buildMrNoteMarker(context) {
+    return `<!-- ${exports.CONTROL9_MR_MARKER_PREFIX}:pipeline=${context.pipelineId}:job=${context.jobName} -->`;
+}
+function buildMrNoteBody(rendered, marker, presentation = "policy") {
+    return `${marker}\n\n${(0, workflow_summary_1.buildWorkflowSummarySection)(rendered, presentation)}`;
+}
+function readMrNoteContextFromEnv() {
+    const mergeRequestIid = readPositiveInteger(readEnv("CI_MERGE_REQUEST_IID"));
+    if (!mergeRequestIid) {
+        return undefined;
+    }
+    const token = resolveGitLabToken();
+    if (!token) {
+        return undefined;
+    }
+    const projectId = readEnv("CI_PROJECT_ID");
+    const serverUrl = readEnv("CI_SERVER_URL");
+    if (!projectId || !serverUrl) {
+        return undefined;
+    }
+    return {
+        apiBaseUrl: `${serverUrl.replace(/\/$/, "")}/api/v4`,
+        token,
+        projectId,
+        mergeRequestIid,
+        pipelineId: readEnv("CI_PIPELINE_ID") || "pipeline",
+        jobName: readEnv("CI_JOB_NAME") || "job",
+    };
+}
+function isPermissionError(error) {
+    return error instanceof GitLabApiError && isPermissionErrorStatus(error.status);
+}
+function isPermissionErrorStatus(status) {
+    return status === 401 || status === 403;
+}
+class GitLabApiError extends Error {
+    status;
+    constructor(status, message) {
+        super(message);
+        this.status = status;
+        this.name = "GitLabApiError";
+    }
+}
+exports.GitLabApiError = GitLabApiError;
+function createFetchGitLabMrNotesClient(apiBaseUrl, token) {
+    const baseUrl = apiBaseUrl.replace(/\/$/, "");
+    const encodedProject = (projectId) => encodeURIComponent(projectId);
+    async function request(method, path, body) {
+        const response = await fetch(`${baseUrl}${path}`, {
+            method,
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+                "PRIVATE-TOKEN": token,
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        if (!response.ok) {
+            throw new GitLabApiError(response.status, `GitLab API ${method} ${path} failed`);
+        }
+        return (await response.json());
+    }
+    return {
+        async listMergeRequestNotes(projectId, mergeRequestIid) {
+            return request("GET", `/projects/${encodedProject(projectId)}/merge_requests/${mergeRequestIid}/notes`);
+        },
+        async createMergeRequestNote(projectId, mergeRequestIid, noteBody) {
+            return request("POST", `/projects/${encodedProject(projectId)}/merge_requests/${mergeRequestIid}/notes`, { body: noteBody });
+        },
+        async updateMergeRequestNote(projectId, mergeRequestIid, noteId, noteBody) {
+            return request("PUT", `/projects/${encodedProject(projectId)}/merge_requests/${mergeRequestIid}/notes/${noteId}`, { body: noteBody });
+        },
+    };
+}
+function findExistingNote(notes, marker) {
+    return notes.find((note) => note.body.includes(marker));
+}
+async function publishMrNote(input, deps = {}) {
+    const presentation = input.presentation ?? "policy";
+    const resolved = {
+        readContext: readMrNoteContextFromEnv,
+        warning: (message) => {
+            console.warn(message);
+        },
+        client: createFetchGitLabMrNotesClient(`${readEnv("CI_SERVER_URL").replace(/\/$/, "")}/api/v4`, resolveGitLabToken()),
+        ...deps,
+    };
+    const context = resolved.readContext();
+    if (!context) {
+        if (!readPositiveInteger(readEnv("CI_MERGE_REQUEST_IID"))) {
+            return { state: "skipped-no-mr" };
+        }
+        if (!resolveGitLabToken()) {
+            return { state: "skipped-no-token" };
+        }
+        return { state: "skipped-no-mr" };
+    }
+    const marker = buildMrNoteMarker(context);
+    const body = buildMrNoteBody(input.rendered, marker, presentation);
+    try {
+        const notes = await resolved.client.listMergeRequestNotes(context.projectId, context.mergeRequestIid);
+        const existing = findExistingNote(notes, marker);
+        if (existing) {
+            const updated = await resolved.client.updateMergeRequestNote(context.projectId, context.mergeRequestIid, existing.id, body);
+            return { state: "updated", noteId: updated.id };
+        }
+        const created = await resolved.client.createMergeRequestNote(context.projectId, context.mergeRequestIid, body);
+        return { state: "created", noteId: created.id };
+    }
+    catch (error) {
+        if (isPermissionError(error)) {
+            resolved.warning("Control9 skipped merge request note: insufficient GitLab token permissions.");
+            return { state: "skipped-permission" };
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        resolved.warning(`Control9 merge request note failed; job log sections and prefixes remain available. ${message}`);
+        return { state: "failed-fallback" };
+    }
 }
 
 
@@ -33448,15 +33612,24 @@ async function runPolicyFlow(options) {
         runtimeMode: inputs.mode,
         failOpenEnvironments: inputs.failOpenEnvironments,
     });
-    const summary = submission.status === "success"
-        ? (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission.decision)
-        : (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
+    let summary;
+    if (submission.status === "success" && routedOutcome.renderInput.kind === "policy_decision") {
+        summary = (0, outputs_1.buildValidationSummary)(inputs, routed, artifactFingerprint, envelope, routedOutcome.renderInput.decision, {
+            correlationId: routedOutcome.correlationId ?? envelope.correlationId,
+        });
+    }
+    else if (submission.status === "failure") {
+        summary = (0, outputs_1.buildFailureValidationSummary)(inputs, routed, artifactFingerprint, envelope, submission, routedOutcome.summaryMessage);
+    }
+    else {
+        throw new types_1.Control9ActionError("Unexpected policy submission outcome.");
+    }
     const summaryPath = (0, outputs_1.writeSummaryFile)(summary);
     (0, outputs_1.buildActionResult)(summaryPath, artifactFingerprint, envelope, {
         decisionKind: routedOutcome.decisionKindOutput,
         decisionId: submission.status === "success" ? submission.decision.decisionId : "",
     });
-    const feedback = (0, job_log_1.publishGitLabJobFeedback)({
+    const feedback = await (0, job_log_1.publishGitLabPresentationFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
         presentation: "policy",
@@ -33489,7 +33662,7 @@ async function runDeployVerificationFlow(options) {
         verificationStatus: routedOutcome.verificationStatusOutput,
         decisionId: submission.status === "success" ? (submission.verification.decisionId ?? "") : "",
     });
-    const feedback = (0, job_log_1.publishGitLabJobFeedback)({
+    const feedback = await (0, job_log_1.publishGitLabPresentationFeedback)({
         rendered: routedOutcome.rendered,
         summaryPath,
         presentation: "deploy-verification",
@@ -33632,6 +33805,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.routeVerificationSubmissionOutcome = routeVerificationSubmissionOutcome;
 exports.routePolicySubmissionOutcome = routePolicySubmissionOutcome;
 const resolve_blocking_1 = __nccwpck_require__(4199);
+const normalize_1 = __nccwpck_require__(2425);
 const decision_renderer_1 = __nccwpck_require__(1206);
 function resolveVerificationBlocking(verificationStatus, runtimeMode) {
     if (verificationStatus === "verified") {
@@ -33730,9 +33904,10 @@ function buildVerificationRenderInput(options) {
 function routePolicySubmissionOutcome(options) {
     const { submission, artifactFingerprint, targetEnvironment, redactionReport, runtimeMode, failOpenEnvironments, } = options;
     if (submission.status === "success") {
+        const projected = (0, normalize_1.projectPolicyDecisionForRuntime)(submission.decision, runtimeMode);
         const renderInput = {
             kind: "policy_decision",
-            decision: submission.decision,
+            decision: projected.decision,
             artifactFingerprint,
             targetEnvironment,
             redactionReport,
@@ -33743,8 +33918,9 @@ function routePolicySubmissionOutcome(options) {
             renderInput,
             rendered,
             blocksWorkflow: rendered.blocksWorkflow,
-            decisionKindOutput: submission.decision.decisionKind,
-            summaryMessage: submission.decision.reason,
+            decisionKindOutput: projected.decisionKindOutput,
+            summaryMessage: projected.decision.reason,
+            correlationId: projected.correlationId,
         };
     }
     const renderInput = submission.failureKind === "malformed_response"
@@ -33801,7 +33977,7 @@ exports.writeSummaryFile = writeSummaryFile;
 exports.buildActionResult = buildActionResult;
 const node_fs_1 = __nccwpck_require__(3024);
 const node_path_1 = __importDefault(__nccwpck_require__(6760));
-function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, decision) {
+function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, decision, options) {
     return {
         mode: inputs.mode,
         tenantId: inputs.tenantId,
@@ -33813,7 +33989,7 @@ function buildValidationSummary(inputs, routed, artifactFingerprint, envelope, d
         artifactPaths: routed.artifactPaths,
         redactionProfile: inputs.redactionProfile ?? "standard",
         envelopeId: envelope.envelopeId,
-        correlationId: envelope.correlationId,
+        correlationId: options?.correlationId ?? envelope.correlationId,
         decisionId: decision.decisionId,
         decisionKind: decision.decisionKind,
         decisionReason: decision.reason,
@@ -34195,7 +34371,7 @@ class Control9PolicyClient {
                 }
                 try {
                     const payload = (await response.json());
-                    const decision = (0, normalize_1.normalizePolicyDecision)(payload);
+                    const decision = (0, normalize_1.normalizePolicyDecisionResponse)(payload);
                     return { status: "success", decision };
                 }
                 catch (error) {
@@ -34243,13 +34419,19 @@ function createPolicyClient(options) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizePolicyDecisionResponse = normalizePolicyDecisionResponse;
+exports.projectPolicyDecisionForRuntime = projectPolicyDecisionForRuntime;
 exports.normalizePolicyDecision = normalizePolicyDecision;
 const types_1 = __nccwpck_require__(8522);
-const ALLOWED_DECISION_KINDS = new Set([
+const TERMINAL_DECISION_KINDS = new Set([
     "allow",
     "deny",
     "require_approval",
     "observe",
+]);
+const INCOMING_DECISION_KINDS = new Set([
+    ...TERMINAL_DECISION_KINDS,
+    "pending",
 ]);
 function readStringField(response, camelCase, snakeCase) {
     const camelValue = response[camelCase];
@@ -34262,10 +34444,11 @@ function readStringField(response, camelCase, snakeCase) {
     }
     return undefined;
 }
-function normalizePolicyDecision(response) {
+function normalizePolicyDecisionResponse(response) {
     const decisionId = readStringField(response, "decisionId", "decision_id");
     const decisionKindRaw = readStringField(response, "decisionKind", "decision_kind");
     const reason = readStringField(response, "reason", "reason");
+    const correlationId = readStringField(response, "correlationId", "correlation_id");
     if (!decisionId) {
         throw new types_1.Control9ActionError("Control9 policy response is missing decision id.");
     }
@@ -34273,7 +34456,7 @@ function normalizePolicyDecision(response) {
         throw new types_1.Control9ActionError("Control9 policy response is missing decision kind.");
     }
     const normalizedKind = decisionKindRaw.toLowerCase().replace(/-/g, "_");
-    if (!ALLOWED_DECISION_KINDS.has(normalizedKind)) {
+    if (!INCOMING_DECISION_KINDS.has(normalizedKind)) {
         throw new types_1.Control9ActionError(`Unsupported Control9 decision kind "${decisionKindRaw}".`);
     }
     if (!reason) {
@@ -34286,9 +34469,67 @@ function normalizePolicyDecision(response) {
         decisionId,
         decisionKind: normalizedKind,
         reason,
+        correlationId,
         riskSummary,
         policyVersion,
         followUp,
+    };
+}
+function projectPolicyDecisionForRuntime(parsed, runtimeMode) {
+    if (parsed.decisionKind !== "pending") {
+        return {
+            decision: {
+                decisionId: parsed.decisionId,
+                decisionKind: parsed.decisionKind,
+                reason: parsed.reason,
+                riskSummary: parsed.riskSummary,
+                policyVersion: parsed.policyVersion,
+                followUp: parsed.followUp,
+            },
+            decisionKindOutput: parsed.decisionKind,
+            correlationId: parsed.correlationId,
+        };
+    }
+    if (runtimeMode === "shadow") {
+        return {
+            decision: {
+                decisionId: parsed.decisionId,
+                decisionKind: "observe",
+                reason: parsed.reason,
+                riskSummary: parsed.riskSummary,
+                policyVersion: parsed.policyVersion,
+                followUp: parsed.followUp,
+            },
+            decisionKindOutput: "observe",
+            correlationId: parsed.correlationId,
+        };
+    }
+    return {
+        decision: {
+            decisionId: parsed.decisionId,
+            decisionKind: "deny",
+            reason: parsed.reason,
+            riskSummary: parsed.riskSummary,
+            policyVersion: parsed.policyVersion,
+            followUp: parsed.followUp,
+        },
+        decisionKindOutput: "deny",
+        correlationId: parsed.correlationId,
+    };
+}
+/** @deprecated Use {@link normalizePolicyDecisionResponse} */
+function normalizePolicyDecision(response) {
+    const parsed = normalizePolicyDecisionResponse(response);
+    if (parsed.decisionKind === "pending") {
+        throw new types_1.Control9ActionError(`Unsupported Control9 decision kind "pending".`);
+    }
+    return {
+        decisionId: parsed.decisionId,
+        decisionKind: parsed.decisionKind,
+        reason: parsed.reason,
+        riskSummary: parsed.riskSummary,
+        policyVersion: parsed.policyVersion,
+        followUp: parsed.followUp,
     };
 }
 

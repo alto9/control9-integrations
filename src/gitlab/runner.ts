@@ -71,23 +71,30 @@ async function runPolicyFlow(options: {
     failOpenEnvironments: inputs.failOpenEnvironments,
   });
 
-  const summary =
-    submission.status === "success"
-      ? buildValidationSummary(
-          inputs,
-          routed,
-          artifactFingerprint,
-          envelope,
-          submission.decision,
-        )
-      : buildFailureValidationSummary(
-          inputs,
-          routed,
-          artifactFingerprint,
-          envelope,
-          submission,
-          routedOutcome.summaryMessage,
-        );
+  let summary;
+  if (submission.status === "success" && routedOutcome.renderInput.kind === "policy_decision") {
+    summary = buildValidationSummary(
+      inputs,
+      routed,
+      artifactFingerprint,
+      envelope,
+      routedOutcome.renderInput.decision,
+      {
+        correlationId: routedOutcome.correlationId ?? envelope.correlationId,
+      },
+    );
+  } else if (submission.status === "failure") {
+    summary = buildFailureValidationSummary(
+      inputs,
+      routed,
+      artifactFingerprint,
+      envelope,
+      submission,
+      routedOutcome.summaryMessage,
+    );
+  } else {
+    throw new Control9ActionError("Unexpected policy submission outcome.");
+  }
   const summaryPath = writeSummaryFile(summary);
   buildActionResult(summaryPath, artifactFingerprint, envelope, {
     decisionKind: routedOutcome.decisionKindOutput,

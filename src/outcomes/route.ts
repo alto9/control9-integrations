@@ -1,5 +1,6 @@
 import type { RedactionReport } from "../envelope/types";
 import { resolveApiFailureBlocksWorkflow } from "../blocking/resolve-blocking";
+import { projectPolicyDecisionForRuntime } from "../policy/normalize";
 import type { PolicySubmissionResult } from "../policy/submission";
 import type { VerificationSubmissionResult } from "../verification/submission";
 import type { DeployVerification, VerificationStatus } from "../verification/types";
@@ -14,6 +15,7 @@ export interface RoutedPolicyOutcome {
   blocksWorkflow: boolean;
   decisionKindOutput: OutputDecisionKind;
   summaryMessage: string;
+  correlationId?: string;
 }
 
 export interface RoutePolicyOutcomeOptions {
@@ -173,9 +175,13 @@ export function routePolicySubmissionOutcome(
   } = options;
 
   if (submission.status === "success") {
+    const projected = projectPolicyDecisionForRuntime(
+      submission.decision,
+      runtimeMode,
+    );
     const renderInput: DecisionRenderInput = {
       kind: "policy_decision",
-      decision: submission.decision,
+      decision: projected.decision,
       artifactFingerprint,
       targetEnvironment,
       redactionReport,
@@ -187,8 +193,9 @@ export function routePolicySubmissionOutcome(
       renderInput,
       rendered,
       blocksWorkflow: rendered.blocksWorkflow,
-      decisionKindOutput: submission.decision.decisionKind,
-      summaryMessage: submission.decision.reason,
+      decisionKindOutput: projected.decisionKindOutput,
+      summaryMessage: projected.decision.reason,
+      correlationId: projected.correlationId,
     };
   }
 
