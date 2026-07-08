@@ -1,7 +1,5 @@
 {
-  "description": "Successful verified deploy verification response for integration tests.",
   "verificationId": "verify-001",
   "verificationStatus": "verified",
-  "decisionId": "dec-approved-001",
-  "targetEnvironment": "production"
+  "decisionId": "dec-approved-001"
 }

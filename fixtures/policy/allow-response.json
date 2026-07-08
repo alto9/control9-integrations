@@ -1,0 +1,10 @@
+{
+  "decisionId": "dec-allow-1",
+  "decisionKind": "allow",
+  "reason": "Change is within approved policy bounds.",
+  "correlationId": "corr-allow-001",
+  "runtimeMode": "shadow",
+  "mayContinue": true,
+  "riskSummary": "No elevated risk identified.",
+  "policyVersion": "2026.06.1"
+}

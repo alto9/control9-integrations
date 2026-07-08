@@ -1,9 +1,7 @@
 {
-  "description": "Deploy verification response when the artifact fingerprint does not match the approved baseline.",
   "verificationId": "verify-mismatch-001",
   "verificationStatus": "fingerprint_mismatch",
   "decisionId": "dec-approved-002",
   "expectedFingerprint": "fp-approved-baseline",
-  "actualFingerprint": "fp-current-artifact",
-  "targetEnvironment": "production"
+  "actualFingerprint": "fp-current-artifact"
 }

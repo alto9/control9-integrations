@@ -1,0 +1,14 @@
+{
+  "decisionId": "dec-approval-1",
+  "decisionKind": "require_approval",
+  "reason": "Production change requires approval before deploy authority.",
+  "correlationId": "corr-approval-001",
+  "runtimeMode": "enforce",
+  "mayContinue": false,
+  "requiredAction": "approval",
+  "riskSummary": "Creates public-facing resources in a protected environment.",
+  "policyVersion": "2026.06.1",
+  "followUp": {
+    "approval_url": "https://control9.example/approve/dec-approval-1"
+  }
+}

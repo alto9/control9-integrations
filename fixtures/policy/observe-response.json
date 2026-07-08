@@ -1,0 +1,10 @@
+{
+  "decisionId": "dec-observe-1",
+  "decisionKind": "observe",
+  "reason": "Public S3 bucket change detected.",
+  "correlationId": "corr-observe-001",
+  "runtimeMode": "shadow",
+  "mayContinue": true,
+  "riskSummary": "Bucket policy may expose objects publicly.",
+  "policyVersion": "2026.06.1"
+}
