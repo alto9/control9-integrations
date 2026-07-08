@@ -44,7 +44,7 @@ The package is a Node-based GitHub Action with `runs.using: node20` and a GitLab
 
 Policy client (`src/policy/client.ts`) and verification client (`src/verification/client.ts`) implement the canonical routes above. `keyId` is derived as SHA-256(signing secret).slice(0, 16) per `.ai/data/serialization.md`.
 
-Policy decision normalization accepts SaaS `pending` responses from policy submission. Runtime handling projects `pending` to effective `observe` in shadow mode and fails closed in enforce mode without in-job polling.
+Policy decision normalization accepts SaaS `pending` responses from policy submission as an incoming API state, not as a terminal client decision kind. Runtime handling projects `pending` to effective `observe` in shadow mode, preserves the SaaS `correlationId` in summary/output data, and fails closed in enforce mode without in-job polling.
 
 Customer-facing configuration uses `signing-secret` as the required HMAC signing material. MVP does not expose a GitHub Action input, GitLab component input, or `INPUT_*` environment mapping for a separate Control9 API Bearer token; any Bearer header is limited to lower-level client adapters that explicitly provide `apiToken`.
 

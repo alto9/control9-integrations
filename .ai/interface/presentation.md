@@ -62,4 +62,4 @@ Implementation-level items not yet fully specified. `/refine-issue` resolves the
 
 ### Control9 project plan
 
-- Define enforce-mode approval wait, polling behavior, and stale approval handling (`runtime/execution_model.md`, `integration/messaging_async.md`).
+- Define future enforce-mode approval wait, polling behavior, and stale approval handling for explicit approval workflows (`runtime/execution_model.md`, `integration/messaging_async.md`). SaaS `pending` responses do not render as a client-side wait state in the MVP.

@@ -12,4 +12,4 @@ This doc describes asynchronous delivery, replay, notification, retry, and webho
 Implementation-level items not yet fully specified. `/refine-issue` resolves these into timeless contract prose and removes or collapses bullets when done.
 
 ### Control9 project plan
-- Define how approval-required state blocks or waits in GitHub and GitLab.
+- Define how explicit approval-required workflows block or wait in GitHub and GitLab. SaaS `pending` policy responses are not asynchronous wait states for the CI client in the MVP; shadow mode records the correlation id and continues, while enforce mode fails closed without polling.
