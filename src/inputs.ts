@@ -1,5 +1,30 @@
+import * as core from "@actions/core";
+
 import type { ActionInputs, RuntimeMode, IacTool, CommandCategory } from "./types";
 import { Control9ActionError } from "./types";
+
+/**
+ * Read a workflow input from the process environment.
+ *
+ * GitHub Actions exposes hyphenated ids as `INPUT_<NAME>` with hyphens preserved
+ * (see `@actions/core` getInput). The GitLab component and local tests export the
+ * same logical inputs with hyphens normalized to underscores
+ * (`INPUT_CONTROL9_API_URL`). Prefer the GitHub form, then fall back.
+ */
+function readInput(name: string): string | undefined {
+  const fromGithub = core.getInput(name);
+  if (fromGithub.trim()) {
+    return fromGithub;
+  }
+
+  const underscoredKey = `INPUT_${name.replace(/[-\s]/g, "_").toUpperCase()}`;
+  const fromUnderscored = process.env[underscoredKey];
+  if (fromUnderscored?.trim()) {
+    return fromUnderscored;
+  }
+
+  return undefined;
+}
 
 const RUNTIME_MODES: RuntimeMode[] = ["shadow", "enforce"];
 const IAC_TOOLS: IacTool[] = ["terraform", "opentofu", "cdk", "cloudformation"];
@@ -133,18 +158,18 @@ export function parseActionInputs(raw: RawActionInputs): ActionInputs {
 
 export function readActionInputsFromEnv(): ActionInputs {
   return parseActionInputs({
-    mode: process.env.INPUT_MODE,
-    control9ApiUrl: process.env.INPUT_CONTROL9_API_URL,
-    tenantId: process.env.INPUT_TENANT_ID,
-    signingSecret: process.env.INPUT_SIGNING_SECRET,
-    targetEnvironment: process.env.INPUT_TARGET_ENVIRONMENT,
-    requestedAuthority: process.env.INPUT_REQUESTED_AUTHORITY,
-    iacTool: process.env.INPUT_IAC_TOOL,
-    command: process.env.INPUT_COMMAND,
-    artifactPaths: process.env.INPUT_ARTIFACT_PATHS,
-    workingDirectory: process.env.INPUT_WORKING_DIRECTORY,
-    redactionProfile: process.env.INPUT_REDACTION_PROFILE,
-    redactionAdditionalPatterns: process.env.INPUT_REDACTION_ADDITIONAL_PATTERNS,
-    failOpenEnvironments: process.env.INPUT_FAIL_OPEN_ENVIRONMENTS,
+    mode: readInput("mode"),
+    control9ApiUrl: readInput("control9-api-url"),
+    tenantId: readInput("tenant-id"),
+    signingSecret: readInput("signing-secret"),
+    targetEnvironment: readInput("target-environment"),
+    requestedAuthority: readInput("requested-authority"),
+    iacTool: readInput("iac-tool"),
+    command: readInput("command"),
+    artifactPaths: readInput("artifact-paths"),
+    workingDirectory: readInput("working-directory"),
+    redactionProfile: readInput("redaction-profile"),
+    redactionAdditionalPatterns: readInput("redaction-additional-patterns"),
+    failOpenEnvironments: readInput("fail-open-environments"),
   });
 }

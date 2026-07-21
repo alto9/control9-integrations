@@ -33361,14 +33361,68 @@ void main();
 /***/ }),
 
 /***/ 8422:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseActionInputs = parseActionInputs;
 exports.readActionInputsFromEnv = readActionInputsFromEnv;
+const core = __importStar(__nccwpck_require__(7484));
 const types_1 = __nccwpck_require__(8522);
+/**
+ * Read a workflow input from the process environment.
+ *
+ * GitHub Actions exposes hyphenated ids as `INPUT_<NAME>` with hyphens preserved
+ * (see `@actions/core` getInput). The GitLab component and local tests export the
+ * same logical inputs with hyphens normalized to underscores
+ * (`INPUT_CONTROL9_API_URL`). Prefer the GitHub form, then fall back.
+ */
+function readInput(name) {
+    const fromGithub = core.getInput(name);
+    if (fromGithub.trim()) {
+        return fromGithub;
+    }
+    const underscoredKey = `INPUT_${name.replace(/[-\s]/g, "_").toUpperCase()}`;
+    const fromUnderscored = process.env[underscoredKey];
+    if (fromUnderscored?.trim()) {
+        return fromUnderscored;
+    }
+    return undefined;
+}
 const RUNTIME_MODES = ["shadow", "enforce"];
 const IAC_TOOLS = ["terraform", "opentofu", "cdk", "cloudformation"];
 const COMMAND_CATEGORIES = [
@@ -33458,19 +33512,19 @@ function parseActionInputs(raw) {
 }
 function readActionInputsFromEnv() {
     return parseActionInputs({
-        mode: process.env.INPUT_MODE,
-        control9ApiUrl: process.env.INPUT_CONTROL9_API_URL,
-        tenantId: process.env.INPUT_TENANT_ID,
-        signingSecret: process.env.INPUT_SIGNING_SECRET,
-        targetEnvironment: process.env.INPUT_TARGET_ENVIRONMENT,
-        requestedAuthority: process.env.INPUT_REQUESTED_AUTHORITY,
-        iacTool: process.env.INPUT_IAC_TOOL,
-        command: process.env.INPUT_COMMAND,
-        artifactPaths: process.env.INPUT_ARTIFACT_PATHS,
-        workingDirectory: process.env.INPUT_WORKING_DIRECTORY,
-        redactionProfile: process.env.INPUT_REDACTION_PROFILE,
-        redactionAdditionalPatterns: process.env.INPUT_REDACTION_ADDITIONAL_PATTERNS,
-        failOpenEnvironments: process.env.INPUT_FAIL_OPEN_ENVIRONMENTS,
+        mode: readInput("mode"),
+        control9ApiUrl: readInput("control9-api-url"),
+        tenantId: readInput("tenant-id"),
+        signingSecret: readInput("signing-secret"),
+        targetEnvironment: readInput("target-environment"),
+        requestedAuthority: readInput("requested-authority"),
+        iacTool: readInput("iac-tool"),
+        command: readInput("command"),
+        artifactPaths: readInput("artifact-paths"),
+        workingDirectory: readInput("working-directory"),
+        redactionProfile: readInput("redaction-profile"),
+        redactionAdditionalPatterns: readInput("redaction-additional-patterns"),
+        failOpenEnvironments: readInput("fail-open-environments"),
     });
 }
 
