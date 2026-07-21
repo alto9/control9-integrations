@@ -1,5 +1,3 @@
-import * as core from "@actions/core";
-
 import type { ActionInputs, RuntimeMode, IacTool, CommandCategory } from "./types";
 import { Control9ActionError } from "./types";
 
@@ -7,17 +5,27 @@ import { Control9ActionError } from "./types";
  * Read a workflow input from the process environment.
  *
  * GitHub Actions exposes hyphenated ids as `INPUT_<NAME>` with hyphens preserved
- * (see `@actions/core` getInput). The GitLab component and local tests export the
- * same logical inputs with hyphens normalized to underscores
+ * (same key shape as `@actions/core` getInput). The GitLab component and local
+ * tests export the same logical inputs with hyphens normalized to underscores
  * (`INPUT_CONTROL9_API_URL`). Prefer the GitHub form, then fall back.
+ *
+ * Reads `process.env` directly so unit tests that mock `@actions/core` without
+ * `getInput` keep working.
  */
 function readInput(name: string): string | undefined {
-  const fromGithub = core.getInput(name);
-  if (fromGithub.trim()) {
+  // GitHub Actions / @actions/core: spaces → `_`, hyphens preserved.
+  const githubKey = `INPUT_${name.replace(/ /g, "_").toUpperCase()}`;
+  const fromGithub = process.env[githubKey];
+  if (fromGithub?.trim()) {
     return fromGithub;
   }
 
+  // GitLab component / older tests: hyphens and spaces → underscores.
   const underscoredKey = `INPUT_${name.replace(/[-\s]/g, "_").toUpperCase()}`;
+  if (underscoredKey === githubKey) {
+    return undefined;
+  }
+
   const fromUnderscored = process.env[underscoredKey];
   if (fromUnderscored?.trim()) {
     return fromUnderscored;
