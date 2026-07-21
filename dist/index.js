@@ -33180,6 +33180,98 @@ async function publishWorkflowFeedback(input, deps = {}) {
 
 /***/ }),
 
+/***/ 7515:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Parse and explain Control9 CI ingestion HTTP error responses.
+ *
+ * Non-2xx policy/verification responses often carry a stable `code` (for example
+ * `invalid_signature` or `unknown_repository`). The client previously folded those
+ * into a generic "could not reach the API" summary; this module keeps the HTTP
+ * status and maps known codes to actionable guidance.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.readCiApiErrorDetails = readCiApiErrorDetails;
+exports.formatCiApiFailureDetail = formatCiApiFailureDetail;
+const CODE_GUIDANCE = {
+    invalid_envelope: "The submitted action envelope failed Control9 schema validation. Check integration version compatibility and artifact inputs.",
+    invalid_signature: "Envelope signature verification failed or the keyId is unknown for this tenant. Confirm CONTROL9_SIGNING_SECRET matches the active signing secret generated in Control9 admin for CONTROL9_TENANT_ID.",
+    stale_signature: "The envelope signedAt timestamp is outside the allowed freshness window. Check GitHub Actions runner clock skew and rerun the job.",
+    entitlement_required: "The tenant is missing a current entitlement required for ingestion. Complete billing or entitlement setup in Control9 admin.",
+    unknown_repository: "The repository is not registered as a protected repository for this tenant. Register the GitHub repository (owner/name) in Control9 admin.",
+    unknown_environment: "The target environment key is not registered for this repository. Register the environment key that matches target-environment in Control9 admin.",
+    runtime_mode_rejected: "The envelope runtime mode is not allowed for this environment configuration.",
+    redaction_unsafe: "The envelope failed Control9 redaction safety checks before acceptance.",
+};
+function readOptionalString(record, ...keys) {
+    for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) {
+            return value.trim();
+        }
+    }
+    return undefined;
+}
+/** Read status plus optional flat CI error body fields from a failed Response. */
+async function readCiApiErrorDetails(response) {
+    const httpStatus = response.status;
+    let bodyText = "";
+    try {
+        bodyText = await response.text();
+    }
+    catch {
+        return { httpStatus };
+    }
+    if (!bodyText.trim()) {
+        return { httpStatus };
+    }
+    try {
+        const parsed = JSON.parse(bodyText);
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            return { httpStatus, message: bodyText.slice(0, 300) };
+        }
+        const record = parsed;
+        return {
+            httpStatus,
+            code: readOptionalString(record, "code"),
+            message: readOptionalString(record, "message"),
+            correlationId: readOptionalString(record, "correlationId", "correlation_id"),
+        };
+    }
+    catch {
+        return { httpStatus, message: bodyText.slice(0, 300) };
+    }
+}
+/** Build a single-line failure detail suitable for workflow summaries. */
+function formatCiApiFailureDetail(apiName, details) {
+    const statusPart = details.code
+        ? `Control9 ${apiName} API returned HTTP ${details.httpStatus} (code=${details.code}).`
+        : `Control9 ${apiName} API returned HTTP ${details.httpStatus}.`;
+    const parts = [statusPart];
+    if (details.message) {
+        parts.push(details.message);
+    }
+    if (details.code && CODE_GUIDANCE[details.code]) {
+        parts.push(CODE_GUIDANCE[details.code]);
+    }
+    else if (!details.code && details.httpStatus >= 500) {
+        parts.push("This looks like a Control9 service or dependency failure. Check Control9 service status and retry.");
+    }
+    else if (!details.code && details.httpStatus >= 400) {
+        parts.push("This is a non-retryable client or authorization response from Control9, not a network outage.");
+    }
+    if (details.correlationId) {
+        parts.push(`Correlation id: ${details.correlationId}.`);
+    }
+    return parts.join(" ");
+}
+
+
+/***/ }),
+
 /***/ 9407:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -33554,13 +33646,22 @@ function routeVerificationSubmissionOutcome(options) {
             detail: submission.detail,
             runtimeMode,
         }
-        : {
-            kind: submission.failureKind,
-            artifactFingerprint,
-            targetEnvironment,
-            runtimeMode,
-            failOpenEnvironments,
-        };
+        : submission.failureKind === "unavailable_api"
+            ? {
+                kind: "unavailable_api",
+                artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+                failOpenEnvironments,
+                detail: submission.detail,
+            }
+            : {
+                kind: "timeout",
+                artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+                failOpenEnvironments,
+            };
     const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
     const blocksWorkflow = (0, resolve_blocking_1.resolveApiFailureBlocksWorkflow)({
         failureKind: submission.failureKind,
@@ -33641,13 +33742,22 @@ function routePolicySubmissionOutcome(options) {
             detail: submission.detail,
             runtimeMode,
         }
-        : {
-            kind: submission.failureKind,
-            artifactFingerprint,
-            targetEnvironment,
-            runtimeMode,
-            failOpenEnvironments,
-        };
+        : submission.failureKind === "unavailable_api"
+            ? {
+                kind: "unavailable_api",
+                artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+                failOpenEnvironments,
+                detail: submission.detail,
+            }
+            : {
+                kind: "timeout",
+                artifactFingerprint,
+                targetEnvironment,
+                runtimeMode,
+                failOpenEnvironments,
+            };
     const rendered = (0, decision_renderer_1.renderDecisionFeedback)(renderInput);
     const blocksWorkflow = (0, resolve_blocking_1.resolveApiFailureBlocksWorkflow)({
         failureKind: submission.failureKind,
@@ -34022,6 +34132,7 @@ exports.SUPPORTED_PLAN_FORMAT_VERSIONS = new Set(["1.0", "1.1", "1.2"]);
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Control9PolicyClient = void 0;
 exports.createPolicyClient = createPolicyClient;
+const ci_api_error_1 = __nccwpck_require__(7515);
 const normalize_1 = __nccwpck_require__(2425);
 const submission_1 = __nccwpck_require__(5020);
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
@@ -34073,10 +34184,11 @@ class Control9PolicyClient {
                         await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
                         continue;
                     }
+                    const errorDetails = await (0, ci_api_error_1.readCiApiErrorDetails)(response);
                     return {
                         status: "failure",
                         failureKind: "unavailable_api",
-                        detail: `Control9 policy API returned HTTP ${response.status} for envelope submission.`,
+                        detail: (0, ci_api_error_1.formatCiApiFailureDetail)("policy", errorDetails),
                     };
                 }
                 try {
@@ -34463,7 +34575,7 @@ function renderUnavailableApi(input) {
     const failOpen = input.runtimeMode && input.targetEnvironment
         ? (0, resolve_blocking_1.isFailOpenPath)(input.runtimeMode, input.targetEnvironment, input.failOpenEnvironments ?? [])
         : false;
-    const summary = (0, templates_1.buildUnavailableApiSummary)(input.runtimeMode, failOpen);
+    const summary = (0, templates_1.buildUnavailableApiSummary)(input.runtimeMode, failOpen, input.detail);
     const detailLines = (0, templates_1.buildErrorDetailLines)(outcomeKind, input);
     const behavior = resolveBlockingBehavior(outcomeKind, input.runtimeMode, input.targetEnvironment, input.failOpenEnvironments);
     return {
@@ -34727,8 +34839,11 @@ function buildTimeoutSummary(runtimeMode, isFailOpenPath) {
     }
     return base;
 }
-function buildUnavailableApiSummary(runtimeMode, isFailOpenPath) {
-    const base = "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+function buildUnavailableApiSummary(runtimeMode, isFailOpenPath, detail) {
+    const trimmedDetail = detail?.trim();
+    const base = trimmedDetail
+        ? trimmedDetail
+        : "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
     if (runtimeMode === "shadow") {
         return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
     }
@@ -34780,7 +34895,8 @@ function buildErrorDetailLines(outcomeKind, options) {
     if (options.artifactFingerprint) {
         lines.push(`Artifact fingerprint: ${options.artifactFingerprint}`);
     }
-    if (outcomeKind === "malformed_response" && options.detail?.trim()) {
+    if ((outcomeKind === "malformed_response" || outcomeKind === "unavailable_api") &&
+        options.detail?.trim()) {
         lines.push(`Response detail: ${options.detail.trim()}`);
     }
     if (outcomeKind === "redaction_applied" && options.redactionReport) {
@@ -35349,6 +35465,7 @@ exports.Control9ActionError = Control9ActionError;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Control9VerificationClient = void 0;
 exports.createVerificationClient = createVerificationClient;
+const ci_api_error_1 = __nccwpck_require__(7515);
 const submission_1 = __nccwpck_require__(5020);
 const normalize_1 = __nccwpck_require__(9964);
 const submission_2 = __nccwpck_require__(4467);
@@ -35394,10 +35511,11 @@ class Control9VerificationClient {
                         await sleep(this.initialBackoffMs * 2 ** (attempt - 1));
                         continue;
                     }
+                    const errorDetails = await (0, ci_api_error_1.readCiApiErrorDetails)(response);
                     return {
                         status: "failure",
                         failureKind: "unavailable_api",
-                        detail: `Control9 verification API returned HTTP ${response.status} for deploy verification submission.`,
+                        detail: (0, ci_api_error_1.formatCiApiFailureDetail)("verification", errorDetails),
                     };
                 }
                 try {

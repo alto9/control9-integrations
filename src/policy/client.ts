@@ -1,4 +1,5 @@
 import type { ActionEnvelope } from "../envelope/types";
+import { formatCiApiFailureDetail, readCiApiErrorDetails } from "../http/ci-api-error";
 import { normalizePolicyDecisionResponse, type ParsedPolicyDecision } from "./normalize";
 import {
   PolicySubmissionError,
@@ -84,10 +85,11 @@ export class Control9PolicyClient {
             continue;
           }
 
+          const errorDetails = await readCiApiErrorDetails(response);
           return {
             status: "failure",
             failureKind: "unavailable_api",
-            detail: `Control9 policy API returned HTTP ${response.status} for envelope submission.`,
+            detail: formatCiApiFailureDetail("policy", errorDetails),
           };
         }
 

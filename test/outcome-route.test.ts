@@ -99,7 +99,25 @@ describe("routePolicySubmissionOutcome", () => {
     expect(malformed.rendered.label).not.toBe(unavailable.rendered.label);
     expect(malformed.rendered.title).not.toBe(unavailable.rendered.title);
     expect(malformed.rendered.summary).toMatch(/could not be normalized/i);
-    expect(unavailable.rendered.summary).toMatch(/could not reach the policy API/i);
+    expect(unavailable.rendered.summary).toMatch(/HTTP 503/);
+  });
+
+  it("surfaces API rejection detail for unavailable_api outcomes", () => {
+    const routed = routePolicySubmissionOutcome({
+      submission: {
+        status: "failure",
+        failureKind: "unavailable_api",
+        detail:
+          "Control9 policy API returned HTTP 404 (code=unknown_repository). repository not configured. Register the GitHub repository.",
+      },
+      ...baseRouteOptions,
+      runtimeMode: "shadow",
+    });
+
+    expect(routed.summaryMessage).toMatch(/code=unknown_repository/);
+    expect(routed.summaryMessage).toMatch(/Register the GitHub repository/);
+    expect(routed.summaryMessage).toMatch(/Shadow mode is active/);
+    expect(routed.summaryMessage).not.toMatch(/could not reach the policy API/i);
   });
 
   it("does not block deny decisions in shadow mode", () => {

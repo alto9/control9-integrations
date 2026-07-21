@@ -251,6 +251,17 @@ describe("renderDecisionFeedback", () => {
     expect(unavailable.outcomeKind).toBe("unavailable_api");
     expect(unavailable.summary).toMatch(/could not reach the policy API/i);
 
+    const unavailableWithDetail = renderDecisionFeedback({
+      kind: "unavailable_api",
+      runtimeMode: "shadow",
+      detail:
+        "Control9 policy API returned HTTP 401 (code=invalid_signature). envelope signature verification failed. Confirm CONTROL9_SIGNING_SECRET.",
+    });
+    expect(unavailableWithDetail.summary).toMatch(/code=invalid_signature/);
+    expect(unavailableWithDetail.summary).toMatch(/CONTROL9_SIGNING_SECRET/);
+    expect(unavailableWithDetail.summary).toMatch(/Shadow mode is active/);
+    expect(unavailableWithDetail.summary).not.toMatch(/could not reach the policy API/i);
+
     const redaction = renderDecisionFeedback({
       kind: "redaction_applied",
       redactionReport,

@@ -216,6 +216,35 @@ describe("Control9PolicyClient", () => {
     if (result.status === "failure") {
       expect(result.failureKind).toBe("unavailable_api");
       expect(result.detail).toMatch(/HTTP 400/);
+      expect(result.detail).toMatch(/non-retryable/i);
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces stable ingestion error codes in failure detail", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json(
+        {
+          code: "invalid_signature",
+          message: "envelope signature verification failed",
+          correlationId: "corr-sig-1",
+        },
+        { status: 401 },
+      ),
+    );
+    const client = new Control9PolicyClient({
+      apiBaseUrl: "https://api.control9.example",
+      fetchImpl,
+    });
+
+    const result = await client.submitEnvelopeWithOutcome(stubSubmitEnvelopeRequest());
+
+    expect(result.status).toBe("failure");
+    if (result.status === "failure") {
+      expect(result.failureKind).toBe("unavailable_api");
+      expect(result.detail).toMatch(/code=invalid_signature/);
+      expect(result.detail).toMatch(/CONTROL9_SIGNING_SECRET/);
+      expect(result.detail).toMatch(/corr-sig-1/);
     }
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });

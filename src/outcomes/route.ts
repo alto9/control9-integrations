@@ -95,13 +95,22 @@ export function routeVerificationSubmissionOutcome(
           detail: submission.detail,
           runtimeMode,
         }
-      : {
-          kind: submission.failureKind,
-          artifactFingerprint,
-          targetEnvironment,
-          runtimeMode,
-          failOpenEnvironments,
-        };
+      : submission.failureKind === "unavailable_api"
+        ? {
+            kind: "unavailable_api",
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+            failOpenEnvironments,
+            detail: submission.detail,
+          }
+        : {
+            kind: "timeout",
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+            failOpenEnvironments,
+          };
 
   const rendered = renderDecisionFeedback(renderInput);
   const blocksWorkflow = resolveApiFailureBlocksWorkflow({
@@ -208,13 +217,22 @@ export function routePolicySubmissionOutcome(
           detail: submission.detail,
           runtimeMode,
         }
-      : {
-          kind: submission.failureKind,
-          artifactFingerprint,
-          targetEnvironment,
-          runtimeMode,
-          failOpenEnvironments,
-        };
+      : submission.failureKind === "unavailable_api"
+        ? {
+            kind: "unavailable_api",
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+            failOpenEnvironments,
+            detail: submission.detail,
+          }
+        : {
+            kind: "timeout",
+            artifactFingerprint,
+            targetEnvironment,
+            runtimeMode,
+            failOpenEnvironments,
+          };
 
   const rendered = renderDecisionFeedback(renderInput);
   const blocksWorkflow = resolveApiFailureBlocksWorkflow({

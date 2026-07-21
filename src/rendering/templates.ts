@@ -150,9 +150,12 @@ export function buildTimeoutSummary(
 export function buildUnavailableApiSummary(
   runtimeMode?: RuntimeMode,
   isFailOpenPath?: boolean,
+  detail?: string,
 ): string {
-  const base =
-    "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
+  const trimmedDetail = detail?.trim();
+  const base = trimmedDetail
+    ? trimmedDetail
+    : "Control9 could not reach the policy API after bounded retries. Review network access, API endpoint configuration, and Control9 service status before rerunning the job.";
   if (runtimeMode === "shadow") {
     return `${base} Shadow mode is active, so this workflow is not blocked by Control9.`;
   }
@@ -243,7 +246,10 @@ export function buildErrorDetailLines(
     lines.push(`Artifact fingerprint: ${options.artifactFingerprint}`);
   }
 
-  if (outcomeKind === "malformed_response" && options.detail?.trim()) {
+  if (
+    (outcomeKind === "malformed_response" || outcomeKind === "unavailable_api") &&
+    options.detail?.trim()
+  ) {
     lines.push(`Response detail: ${options.detail.trim()}`);
   }
 

@@ -42,6 +42,8 @@ export interface UnavailableApiRenderInput {
   targetEnvironment?: string;
   runtimeMode?: RuntimeMode;
   failOpenEnvironments?: string[];
+  /** HTTP status, API error code, and remediation guidance from the client. */
+  detail?: string;
 }
 
 export interface MalformedResponseRenderInput {

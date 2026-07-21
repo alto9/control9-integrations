@@ -1,4 +1,5 @@
 import type { ActionEnvelope } from "../envelope/types";
+import { formatCiApiFailureDetail, readCiApiErrorDetails } from "../http/ci-api-error";
 import { isTimeoutError } from "../policy/submission";
 import { normalizeDeployVerification } from "./normalize";
 import {
@@ -71,10 +72,11 @@ export class Control9VerificationClient {
             continue;
           }
 
+          const errorDetails = await readCiApiErrorDetails(response);
           return {
             status: "failure",
             failureKind: "unavailable_api",
-            detail: `Control9 verification API returned HTTP ${response.status} for deploy verification submission.`,
+            detail: formatCiApiFailureDetail("verification", errorDetails),
           };
         }
 

@@ -342,7 +342,8 @@ describe("runAction outcome integration", () => {
 
     const summaryContent = readFileSync(stepSummaryPath, "utf8");
     expect(summaryContent).toContain(OUTCOME_TEMPLATES.unavailable_api.title);
-    expect(summaryContent).toMatch(/could not reach the policy API/i);
+    expect(summaryContent).toMatch(/HTTP 503/);
+    expect(summaryContent).toMatch(/service or dependency failure/i);
     expect(summaryContent).toMatch(/Shadow mode is active/i);
     expect(coreMocks.notice.mock.calls[0]?.[1]?.title).toBe(
       OUTCOME_TEMPLATES.unavailable_api.label,
@@ -358,7 +359,7 @@ describe("runAction outcome integration", () => {
     process.env.INPUT_TARGET_ENVIRONMENT = "production";
     mockUnavailableApiExhaustion();
 
-    await expectRunBlocks(/could not reach the policy API/i);
+    await expectRunBlocks(/HTTP 503/);
 
     expect(getOutput("decision-kind")).toBe("unavailable_api");
     expect(coreMocks.warning).toHaveBeenCalled();
@@ -563,7 +564,8 @@ describe("runAction outcome integration", () => {
 
       const summaryContent = readFileSync(stepSummaryPath, "utf8");
       expectDeployVerificationFeedback(summaryContent, "unavailable_api");
-      expect(summaryContent).toMatch(/could not reach the policy API/i);
+      expect(summaryContent).toMatch(/HTTP 503/);
+      expect(summaryContent).toMatch(/verification API returned HTTP 503/i);
       expect(summaryContent).toMatch(/Shadow mode is active/i);
       expect(coreMocks.notice.mock.calls[0]?.[1]?.title).toBe(
         OUTCOME_TEMPLATES.unavailable_api.label,
@@ -575,7 +577,7 @@ describe("runAction outcome integration", () => {
       process.env.INPUT_TARGET_ENVIRONMENT = "production";
       mockUnavailableVerificationApiExhaustion();
 
-      await expectRunBlocks(/could not reach the policy API/i);
+      await expectRunBlocks(/verification API returned HTTP 503/i);
 
       expect(getOutput("verification-status")).toBe("unavailable_api");
       expect(getOutput("verification-id")).toBe("");

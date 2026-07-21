@@ -193,7 +193,7 @@ function renderUnavailableApi(
           input.failOpenEnvironments ?? [],
         )
       : false;
-  const summary = buildUnavailableApiSummary(input.runtimeMode, failOpen);
+  const summary = buildUnavailableApiSummary(input.runtimeMode, failOpen, input.detail);
   const detailLines = buildErrorDetailLines(outcomeKind, input);
   const behavior = resolveBlockingBehavior(
     outcomeKind,
